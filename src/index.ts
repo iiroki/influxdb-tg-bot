@@ -1,10 +1,7 @@
 import dotnev from 'dotenv'
 dotnev.config()
+import { InfluxTelegramBot } from './telegram'
 
-import { TelegramBot } from './telegram'
-
-
-const telegram = new TelegramBot()
-
+const bot = new InfluxTelegramBot()
 console.log('Starting InfluxDB Telegram Bot...')
-telegram.start()
+bot.start()
