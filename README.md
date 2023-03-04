@@ -2,6 +2,8 @@
 
 Telegram bot for InfluxDB.
 
+<img src="./docs/telegram.png" height="600">
+
 **Features:**
 - Browse InfluxDB schema
 - Read latest values
