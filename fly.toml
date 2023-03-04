@@ -1,1 +1,4 @@
 app = "influxdb-tg-bot"
+
+[deploy]
+  strategy = "immediate"
