@@ -1,7 +1,8 @@
+import { parseISO, format } from 'date-fns'
 import { Context, Telegraf } from 'telegraf'
 import { Message, Update} from 'telegraf/types'
-import influx from './influx'
-import { toMdList } from './md'
+import influx, { TagFilter } from './influx'
+import { toInfluxRowMdList, toMdList } from './md'
 
 type TgMessageUpdate = Context<Update> & {
   readonly message: Message.TextMessage
@@ -9,6 +10,7 @@ type TgMessageUpdate = Context<Update> & {
 
 const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
+const ERROR_PREFIX = '[ERROR]'
 
 export class InfluxTelegramBot {
   private readonly bot: Telegraf
@@ -29,7 +31,7 @@ export class InfluxTelegramBot {
     this.bot.use(async (ctx, next) => {
       const username = ctx.message?.from.username
       if (!username || !this.allowedUsernames.has(username)) {
-        await ctx.reply('Unauthorized user!')
+        await ctx.reply(`${ERROR_PREFIX} Unauthorized user!`)
       } else {
         await next()
       }
@@ -37,7 +39,7 @@ export class InfluxTelegramBot {
 
     this.bot.catch((err, ctx) => {
       console.log(`TelegramBot unhandled error: ${ctx}`, err)
-      ctx.reply('Sorry, an unknown error occurred :(')
+      ctx.reply(`${ERROR_PREFIX} Sorry, an unknown error occurred :(`)
     })
 
     this.bot.command('buckets', this.handleGetBuckets.bind(this))
@@ -45,6 +47,8 @@ export class InfluxTelegramBot {
     this.bot.command('fields', this.handleGetFields.bind(this))
     this.bot.command('tags', this.handleGetTags.bind(this))
     this.bot.command('tag', this.handleGetTagValues.bind(this))
+    this.bot.command('last', this.handleGetLastValue.bind(this))
+    this.bot.on('text', async ctx => ctx.reply(`${ERROR_PREFIX} Beep boop, don\'t undestand...`))
     console.log(`TelegramBot initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
 
@@ -59,15 +63,14 @@ export class InfluxTelegramBot {
   }
 
   private async handleGetMeasurements(ctx: TgMessageUpdate) {
-    const params = this.getCommandParams(ctx.message?.text)
-    const bucket = params[0]
+    const [bucket] = this.getCommandParams(ctx.message?.text)
     if (!bucket) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/measurements <bucket>'))
     }
 
     const measurements = await influx.getMeasurements(bucket)
     if (!measurements) {
-      return await ctx.reply(`Unknown bucket: \`${bucket}\``)
+      return await ctx.reply(`${ERROR_PREFIX} No measurements found.`)
     }
 
     await ctx.replyWithMarkdownV2(toMdList(measurements.map(m => m._measurement), 'Measurements'))
@@ -83,7 +86,7 @@ export class InfluxTelegramBot {
 
     const fields = await influx.getFields(bucket, measurement)
     if (!fields) {
-      return await ctx.reply(`Unknown bucket: \`${bucket}\``)
+      return await ctx.reply(`${ERROR_PREFIX} No fields found.`)
     }
 
     await ctx.replyWithMarkdownV2(toMdList(fields, 'Fields'))
@@ -99,7 +102,7 @@ export class InfluxTelegramBot {
 
     const tags = await influx.getTags(bucket, measurement)
     if (!tags) {
-      return await ctx.reply(`Unknown bucket: \`${bucket}\``)
+      return await ctx.reply(`${ERROR_PREFIX} No tags found.`)
     }
 
     await ctx.replyWithMarkdownV2(toMdList(tags, 'Tags'))
@@ -116,14 +119,40 @@ export class InfluxTelegramBot {
 
     const tagValues = await influx.getTagValues(bucket, measurement, tag)
     if (!tagValues) {
-      return await ctx.reply(`Unknown bucket: \`${bucket}\``)
+      return await ctx.reply(`${ERROR_PREFIX} No tag values found.`)
     }
 
-    await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (${tag})`))
+    await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
   }
 
+  private async handleGetLastValue(ctx: TgMessageUpdate) {
+    const params = this.getCommandParams(ctx.message?.text)
+    if (params.length < 4) {
+      return await ctx.replyWithMarkdownV2(
+        this.createUsageText('/last <bucket> <measurement> <field> <tagFilters> [<shownTags>]')
+      )
+    }
+
+    // Source: https://stackoverflow.com/a/19156525
+    const [bucket, measurement, field, tagFilterStr, shownTags] = params
+    const tagFilters: TagFilter[] = tagFilterStr.split(',').map(f => {
+      const [tag, value] = f.split('=')
+      return { tag, value: value.replace(/^"(.*)"$/, '$1') }
+    })
+
+    const rows = await influx.getLastValue(bucket, measurement, field, tagFilters)
+    if (!rows) {
+      return await ctx.reply(`${ERROR_PREFIX} No value(s) found.`)
+    }
+
+    await ctx.replyWithMarkdownV2(
+      toInfluxRowMdList(rows, { header: 'Last value(s)', shownTags: shownTags?.split(',') })
+    )
+  }
+
+  // Source: https://stackoverflow.com/a/16261693
   private getCommandParams(text?: string): string[] {
-    return text ? text.split(' ').slice(1) : []
+    return text ? text.match(/(?:[^\s"]+|"[^"]*")+/g)?.slice(1) ?? [] : []
   }
 
   private createUsageText(usage: string): string {

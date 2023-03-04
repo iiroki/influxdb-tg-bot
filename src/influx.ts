@@ -1,4 +1,9 @@
-import { HttpError, InfluxDB, QueryApi } from '@influxdata/influxdb-client'
+import { HttpError, InfluxDB } from '@influxdata/influxdb-client'
+
+export type TagFilter = {
+  readonly tag: string
+  readonly value: string
+}
 
 export type InfluxBucket = {
   readonly id: string
@@ -18,8 +23,15 @@ export type InfluxField = {
   readonly _field: string
 }
 
-export type InfluxKey = {
+export type InfluxValue = {
   readonly _value: string
+}
+
+export type InfluxRow = InfluxMeasurement & InfluxField & InfluxValue & {
+  readonly _time: string // UTC
+  readonly result: string
+  readonly table: number
+  readonly [key: string]: string | number
 }
 
 const INFLUX_URL = process.env.INFLUX_URL
@@ -38,9 +50,10 @@ const getBuckets = async (): Promise<InfluxBucket[]> => (
 
 const getMeasurements = async (bucket: string, days = 30): Promise<InfluxMeasurement[] | null> => {
   const query = `
-    from(bucket:"${bucket}")
+    from(bucket: "${bucket}")
       |> range(start: -${days}d)
-      |> group(columns: ["_measurement"])
+      |> keys()
+      |> keep(columns: ["_measurement"])
       |> distinct(column: "_measurement")
   `
 
@@ -57,7 +70,7 @@ const getMeasurements = async (bucket: string, days = 30): Promise<InfluxMeasure
 
 const getFields = async (bucket: string, measurement: string, days = 30): Promise<string[] | null> => {
   const query = `
-    from(bucket:"${bucket}")
+    from(bucket: "${bucket}")
       |> range(start: -${days}d)
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
       |> group(columns: ["_field"])
@@ -78,14 +91,16 @@ const getFields = async (bucket: string, measurement: string, days = 30): Promis
 
 const getTags = async (bucket: string, measurement: string, days = 30): Promise<string[] | null> => {
   const query = `
-    from(bucket:"${bucket}")
+    from(bucket: "${bucket}")
       |> range(start: -${days}d)
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
       |> keys()
+      |> group()
+      |> distinct()
   `
 
   try {
-    const rows = await queryApi.collectRows<InfluxKey>(query)
+    const rows = await queryApi.collectRows<InfluxValue>(query)
     return rows.map(r => r._value).filter(c => !c.startsWith('_'))
   } catch (err) {
     if (err instanceof HttpError && err.statusCode === 404) {
@@ -98,15 +113,38 @@ const getTags = async (bucket: string, measurement: string, days = 30): Promise<
 
 const getTagValues = async (bucket: string, measurement: string, tag: string, days = 30): Promise<string[] | null> => {
   const query = `
-    from(bucket:"${bucket}")
+    from(bucket: "${bucket}")
       |> range(start: -${days}d)
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
       |> keyValues(keyColumns: ["${tag}"])
+      |> group()
+      |> distinct()
   `
 
   try {
-    const rows = await queryApi.collectRows<InfluxKey>(query)
+    const rows = await queryApi.collectRows<InfluxValue>(query)
     return rows.map(r => r._value).filter(c => !c.startsWith('_'))
+  } catch (err) {
+    if (err instanceof HttpError && err.statusCode === 404) {
+      return null
+    }
+
+    throw err
+  }
+}
+
+const getLastValue = async (bucket: string, measurement: string, field: string, tagFilters: TagFilter[], days = 30): Promise<InfluxRow[] | null> => {
+  const query = `
+    from(bucket: "${bucket}")
+      |> range(start: -${days}d)
+      |> filter(fn: (r) => r["_measurement"] == "${measurement}")
+      |> filter(fn: (r) => ${tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')})
+      |> filter(fn: (r) => r["_field"] == "${field}")
+      |> last()
+  `
+
+  try {
+    return await queryApi.collectRows<InfluxRow>(query)
   } catch (err) {
     if (err instanceof HttpError && err.statusCode === 404) {
       return null
@@ -121,5 +159,6 @@ export default {
   getMeasurements,
   getFields,
   getTags,
-  getTagValues
+  getTagValues,
+  getLastValue
 }

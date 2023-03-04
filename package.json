@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@influxdata/influxdb-client": "^1.33.1",
+    "date-fns": "^2.29.3",
     "dotenv": "^16.0.3",
     "telegraf": "^4.11.2"
   },
