@@ -24,7 +24,7 @@ export class InfluxTelegramBot {
     this.bot = new Telegraf(TG_API_TOKEN)
     process.on('SIGINT', () => {
       this.bot.stop('SIGINT')
-      console.log('TelegramBot stopped.')
+      this.log('Stopped.')
     })
 
     // Validate the user who sent the message
@@ -38,7 +38,7 @@ export class InfluxTelegramBot {
     })
 
     this.bot.catch((err, ctx) => {
-      console.log(`TelegramBot unhandled error: ${ctx}`, err)
+      this.log(`Unhandled error: ${ctx}`, err)
       ctx.reply(`${ERROR_PREFIX} Sorry, an unknown error occurred :(`)
     })
 
@@ -49,12 +49,12 @@ export class InfluxTelegramBot {
     this.bot.command('tag', this.handleGetTagValues.bind(this))
     this.bot.command('last', this.handleGetLastValue.bind(this))
     this.bot.on('text', async ctx => ctx.reply(`${ERROR_PREFIX} Beep boop, don\'t undestand...`))
-    console.log(`TelegramBot initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
+    this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
 
   start() {
     this.bot.launch()
-    console.log('TelegramBot started.')
+    this.log('Started.')
   }
 
   private async handleGetBuckets(ctx: TgMessageUpdate) {
@@ -157,5 +157,9 @@ export class InfluxTelegramBot {
 
   private createUsageText(usage: string): string {
     return `*Usage:*\n\`${usage}\``
+  }
+
+  private log(...args: any[]) {
+    console.log(`[InfluxTelegramBot]`, ...args)
   }
 }

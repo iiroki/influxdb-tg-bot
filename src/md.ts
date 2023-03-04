@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns'
+import { format, formatDistance, parseISO } from 'date-fns'
 import { InfluxRow } from './influx'
 
 const MD_ESCAPED_CHARS = new Set([
@@ -53,15 +53,14 @@ export const toInfluxRowMdList = (
   }
 
   rows.forEach(r => {
-    console.log(r)
     builder.push(`${ROW_INDENT}\`${r._field}\`: \`${r._value}\``)
     Object.entries(r).filter(e => !(e[0].startsWith('_') || IGNORED_INFLUX_PROPERTIES.has(e[0]))).forEach(tag => {
-      if (shownTags && shownTags.includes(tag[0])) {
+      if (!shownTags || shownTags.includes(tag[0])) {
         builder.push(`${ROW_INDENT}- \`${tag[0]}\`: \`${tag[1]}\``)
       }
     })
 
-    builder.push(`${ROW_INDENT}  (${format(parseISO(r._time), 'E d.M.yyyy HH:mm:ss')})`)
+    builder.push(`${ROW_INDENT}  (${formatDistance(parseISO(r._time), new Date(), { includeSeconds: true })} ago)`)
     builder.push('')
   })
 
