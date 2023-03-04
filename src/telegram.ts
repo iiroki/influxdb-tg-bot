@@ -47,7 +47,7 @@ export class InfluxTelegramBot {
     this.bot.command('fields', this.handleGetFields.bind(this))
     this.bot.command('tags', this.handleGetTags.bind(this))
     this.bot.command('tag', this.handleGetTagValues.bind(this))
-    this.bot.command('last', this.handleGetLastValue.bind(this))
+    this.bot.command('latest', this.handleGetLatestValues.bind(this))
     this.bot.on('text', async ctx => ctx.reply(`${ERROR_PREFIX} Beep boop, don\'t undestand...`))
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
@@ -125,11 +125,11 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
   }
 
-  private async handleGetLastValue(ctx: TgMessageUpdate) {
+  private async handleGetLatestValues(ctx: TgMessageUpdate) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
-        this.createUsageText('/last <bucket> <measurement> <field> <tagFilters> [<shownTags>]')
+        this.createUsageText('/latest <bucket> <measurement> <field> <tagFilters> [<shownTags>]')
       )
     }
 
@@ -146,7 +146,7 @@ export class InfluxTelegramBot {
     }
 
     await ctx.replyWithMarkdownV2(
-      toInfluxRowMdList(rows, { header: 'Last value(s)', shownTags: shownTags?.split(',') })
+      toInfluxRowMdList(rows, { header: 'Latest value(s)', shownTags: shownTags?.split(',') })
     )
   }
 
