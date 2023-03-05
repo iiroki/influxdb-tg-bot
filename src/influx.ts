@@ -133,12 +133,21 @@ const getTagValues = async (bucket: string, measurement: string, tag: string, da
   }
 }
 
-const getLastValue = async (bucket: string, measurement: string, field: string, tagFilters: TagFilter[], days = 30): Promise<InfluxRow[] | null> => {
+const getLastValue = async (
+  bucket: string,
+  measurement: string,
+  field: string,
+  tagFilters: TagFilter[],
+  days = 30
+): Promise<InfluxRow[] | null> => {
+  const tagFilterExpr = tagFilters.length !== 0
+    ? tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')
+    : 'true'
   const query = `
     from(bucket: "${bucket}")
       |> range(start: -${days}d)
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
-      |> filter(fn: (r) => ${tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')})
+      |> filter(fn: (r) => ${tagFilterExpr})
       |> filter(fn: (r) => r["_field"] == "${field}")
       |> last()
   `

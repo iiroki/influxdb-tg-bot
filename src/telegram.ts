@@ -135,7 +135,7 @@ export class InfluxTelegramBot {
 
     // Source: https://stackoverflow.com/a/19156525
     const [bucket, measurement, field, tagFilterStr, shownTags] = params
-    const tagFilters: TagFilter[] = tagFilterStr.split(',').map(f => {
+    const tagFilters: TagFilter[] = (tagFilterStr === '*' ? [] : tagFilterStr.split(',')).map(f => {
       const [tag, value] = f.split('=')
       return { tag, value: value.replace(/^"(.*)"$/, '$1') }
     })
