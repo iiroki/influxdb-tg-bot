@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@influxdata/influxdb-client": "^1.33.1",
+    "chart.js": "^3.9.1",
+    "chartjs-node-canvas": "^4.1.6",
+    "chartjs-plugin-autocolors": "^0.2.2",
     "date-fns": "^2.29.3",
     "dotenv": "^16.0.3",
     "telegraf": "^4.11.2"

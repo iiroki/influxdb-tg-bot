@@ -1,6 +1,7 @@
 import { parseISO, format } from 'date-fns'
 import { Context, Telegraf } from 'telegraf'
 import { Message, Update} from 'telegraf/types'
+import { createLineChart } from './chart'
 import influx, { TagFilter } from './influx'
 import { toInfluxRowMdList, toMdList } from './md'
 
@@ -31,10 +32,17 @@ export class InfluxTelegramBot {
     this.bot.use(async (ctx, next) => {
       const username = ctx.message?.from.username
       if (!username || !this.allowedUsernames.has(username)) {
+        // TODO: This is currently triggered by edited messages
         await ctx.reply(`${ERROR_PREFIX} Unauthorized user!`)
       } else {
         await next()
       }
+    })
+
+    // Log incoming message
+    this.bot.use(async (ctx, next) => {
+      this.log(`Received message: ${JSON.stringify(ctx.message)}`)
+      await next()
     })
 
     this.bot.catch((err, ctx) => {
@@ -48,6 +56,7 @@ export class InfluxTelegramBot {
     this.bot.command('tags', this.handleGetTags.bind(this))
     this.bot.command('tag', this.handleGetTagValues.bind(this))
     this.bot.command('latest', this.handleGetLatestValues.bind(this))
+    this.bot.command('chart', this.handleGetChart.bind(this))
     this.bot.on('text', async ctx => ctx.reply(`${ERROR_PREFIX} Beep boop, don\'t undestand...`))
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
@@ -132,10 +141,7 @@ export class InfluxTelegramBot {
 
     // Source: https://stackoverflow.com/a/19156525
     const [bucket, measurement, field, tagFilterStr, shownTags] = params
-    const tagFilters: TagFilter[] = (tagFilterStr === '*' ? [] : tagFilterStr.split(',')).map(f => {
-      const [tag, value] = f.split('=')
-      return { tag, value: value.replace(/^"(.*)"$/, '$1') }
-    })
+    const tagFilters: TagFilter[] = this.parseTagFilters(tagFilterStr)
 
     const rows = await influx.getLastValue(bucket, measurement, field, tagFilters)
     if (!rows) {
@@ -147,9 +153,40 @@ export class InfluxTelegramBot {
     )
   }
 
+  private async handleGetChart(ctx: TgMessageUpdate) {
+    const params = this.getCommandParams(ctx.message?.text)
+    if (params.length < 4) {
+      return await ctx.replyWithMarkdownV2(
+        this.createUsageText('/chart <bucket> <measurement> <field> <tagFilters> [<days>] [<aggregateWindow>]')
+      )
+    }
+
+    const [bucket, measurement, field, tagFilterStr, daysStr, aggregateWindow] = params
+    const tagFilters: TagFilter[] = this.parseTagFilters(tagFilterStr)
+    const days = Number(daysStr) || 7 // Default: 7 days / 1 week
+    const rows = await influx.getValuesFromTimespan(bucket, measurement, field, tagFilters, days, aggregateWindow)
+    if (!rows || rows.length === 0) {
+      return await ctx.reply(`${ERROR_PREFIX} No value(s) found.`)
+    }
+
+    const chart = await createLineChart(rows)
+    if (!chart) {
+      return await ctx.reply(`${ERROR_PREFIX} Could not create a chart.`)
+    }
+
+    await ctx.replyWithPhoto({ source: chart })
+  }
+
   // Source: https://stackoverflow.com/a/16261693
   private getCommandParams(text?: string): string[] {
     return text ? text.match(/(?:[^\s"]+|"[^"]*")+/g)?.slice(1) ?? [] : []
+  }
+
+  private parseTagFilters(tagFilterStr: string): TagFilter[] {
+    return (tagFilterStr === '*' ? [] : tagFilterStr.split(',')).map(f => {
+      const [tag, value] = f.split('=')
+      return { tag, value: value.replace(/^"(.*)"$/, '$1') }
+    })
   }
 
   private createUsageText(usage: string): string {

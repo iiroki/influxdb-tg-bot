@@ -23,8 +23,12 @@ export type InfluxField = {
   readonly _field: string
 }
 
-export type InfluxValue = {
+export type InfluxKey = {
   readonly _value: string
+}
+
+export type InfluxValue = {
+  readonly _value: number
 }
 
 export type InfluxRow = InfluxMeasurement & InfluxField & InfluxValue & {
@@ -100,7 +104,7 @@ const getTags = async (bucket: string, measurement: string, days = 30): Promise<
   `
 
   try {
-    const rows = await queryApi.collectRows<InfluxValue>(query)
+    const rows = await queryApi.collectRows<InfluxKey>(query)
     return rows.map(r => r._value).filter(c => !c.startsWith('_'))
   } catch (err) {
     if (err instanceof HttpError && err.statusCode === 404) {
@@ -122,7 +126,7 @@ const getTagValues = async (bucket: string, measurement: string, tag: string, da
   `
 
   try {
-    const rows = await queryApi.collectRows<InfluxValue>(query)
+    const rows = await queryApi.collectRows<InfluxKey>(query)
     return rows.map(r => r._value).filter(c => !c.startsWith('_'))
   } catch (err) {
     if (err instanceof HttpError && err.statusCode === 404) {
@@ -143,6 +147,7 @@ const getLastValue = async (
   const tagFilterExpr = tagFilters.length !== 0
     ? tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')
     : 'true'
+
   const query = `
     from(bucket: "${bucket}")
       |> range(start: -${days}d)
@@ -163,11 +168,45 @@ const getLastValue = async (
   }
 }
 
+const getValuesFromTimespan = async (
+  bucket: string,
+  measurement: string,
+  field: string,
+  tagFilters: TagFilter[],
+  days = 30,
+  aggregateWindow = '1h'
+): Promise<InfluxRow[] | null> => {
+  const tagFilterExpr = tagFilters.length !== 0
+    ? tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')
+    : 'true'
+
+  const query = `
+    from(bucket: "${bucket}")
+      |> range(start: -${days}d)
+      |> filter(fn: (r) => r["_measurement"] == "${measurement}")
+      |> filter(fn: (r) => ${tagFilterExpr})
+      |> filter(fn: (r) => r["_field"] == "${field}")
+      |> aggregateWindow(every: ${aggregateWindow}, fn: mean, createEmpty: false)
+  `
+
+  try {
+    return await queryApi.collectRows<InfluxRow>(query)
+  } catch (err) {
+    if (err instanceof HttpError && err.statusCode === 404) {
+      return null
+    }
+
+    throw err
+  }
+
+}
+
 export default {
   getBuckets,
   getMeasurements,
   getFields,
   getTags,
   getTagValues,
-  getLastValue
+  getLastValue,
+  getValuesFromTimespan
 }
