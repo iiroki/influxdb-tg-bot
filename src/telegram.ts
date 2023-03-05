@@ -94,12 +94,11 @@ export class InfluxTelegramBot {
 
   private async handleGetTags(ctx: TgMessageUpdate) {
     const params = this.getCommandParams(ctx.message?.text)
-    const bucket = params[0]
-    const measurement = params[1]
-    if (!bucket || !measurement) {
+    if (params.length < 2) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/tags <bucket> <measurement>'))
     }
 
+    const [bucket, measurement] = params
     const tags = await influx.getTags(bucket, measurement)
     if (!tags) {
       return await ctx.reply(`${ERROR_PREFIX} No tags found.`)
@@ -110,13 +109,11 @@ export class InfluxTelegramBot {
 
   private async handleGetTagValues(ctx: TgMessageUpdate) {
     const params = this.getCommandParams(ctx.message?.text)
-    const bucket = params[0]
-    const measurement = params[1]
-    const tag = params[2]
-    if (!bucket || !measurement || !tag) {
+    if (params.length < 3) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/tag <bucket> <measurement> <tag>'))
     }
 
+    const [bucket, measurement, tag] = params
     const tagValues = await influx.getTagValues(bucket, measurement, tag)
     if (!tagValues) {
       return await ctx.reply(`${ERROR_PREFIX} No tag values found.`)
