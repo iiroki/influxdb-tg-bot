@@ -60,6 +60,7 @@ The bot implements the following commands:
 
 **\*** `tagFilters` and `shownTags` are in the following format:
 - `tagFilters`: Comma separated list of tag filters in key-value pairs (Example: `location=home,host=server`).
+  - `*` can be used to match all values!
 - `shownTags`: Comma separated list of tag names (Example: `location,host`).
 
 ## Configuration
