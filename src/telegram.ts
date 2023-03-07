@@ -3,7 +3,8 @@ import { Context, Telegraf } from 'telegraf'
 import { Message, Update} from 'telegraf/types'
 import { createLineChart } from './chart'
 import influx, { TagFilter } from './influx'
-import { toInfluxRowMdList, toMdList } from './md'
+import { tableTest, toInfluxRowMdList, toMdList } from './md'
+import { divideToInfluxTables } from './util'
 
 type TgMessageUpdate = Context<Update> & {
   readonly message: Message.TextMessage
@@ -55,7 +56,7 @@ export class InfluxTelegramBot {
     this.bot.command('fields', this.handleGetFields.bind(this))
     this.bot.command('tags', this.handleGetTags.bind(this))
     this.bot.command('tag', this.handleGetTagValues.bind(this))
-    this.bot.command('latest', this.handleGetLatestValues.bind(this))
+    this.bot.command('current', this.handleGetCurrentValues.bind(this))
     this.bot.command('chart', this.handleGetChart.bind(this))
     this.bot.on('text', async ctx => ctx.reply(`${ERROR_PREFIX} Beep boop, don\'t undestand...`))
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
@@ -131,11 +132,11 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
   }
 
-  private async handleGetLatestValues(ctx: TgMessageUpdate) {
+  private async handleGetCurrentValues(ctx: TgMessageUpdate) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
-        this.createUsageText('/latest <bucket> <measurement> <field> <tagFilters> [<shownTags>]')
+        this.createUsageText('/current <bucket> <measurement> <field> <tagFilters> [<shownTags>]')
       )
     }
 
@@ -145,11 +146,11 @@ export class InfluxTelegramBot {
 
     const rows = await influx.getLastValue(bucket, measurement, field, tagFilters)
     if (!rows) {
-      return await ctx.reply(`${ERROR_PREFIX} No value(s) found.`)
+      return await ctx.reply(`${ERROR_PREFIX} No values found.`)
     }
 
     await ctx.replyWithMarkdownV2(
-      toInfluxRowMdList(rows, { header: 'Latest value(s)', shownTags: shownTags?.split(',') })
+      toInfluxRowMdList(rows, { header: 'Current values', shownTags: shownTags?.split(',') })
     )
   }
 
@@ -166,15 +167,17 @@ export class InfluxTelegramBot {
     const days = Number(daysStr) || 7 // Default: 7 days / 1 week
     const rows = await influx.getValuesFromTimespan(bucket, measurement, field, tagFilters, days, aggregateWindow)
     if (!rows || rows.length === 0) {
-      return await ctx.reply(`${ERROR_PREFIX} No value(s) found.`)
+      return await ctx.reply(`${ERROR_PREFIX} No values found.`)
     }
 
-    const chart = await createLineChart(rows)
-    if (!chart) {
+    const tables = divideToInfluxTables(rows)
+    const source = await createLineChart(tables)
+    if (!source) {
       return await ctx.reply(`${ERROR_PREFIX} Could not create a chart.`)
     }
 
-    await ctx.replyWithPhoto({ source: chart })
+    const caption = tableTest(tables, 'Chart tags')
+    await ctx.replyWithPhoto({ source }, { caption, parse_mode: 'MarkdownV2' })
   }
 
   // Source: https://stackoverflow.com/a/16261693

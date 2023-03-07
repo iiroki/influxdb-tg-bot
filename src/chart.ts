@@ -1,8 +1,9 @@
-import { Chart, ChartConfiguration, ScatterDataPoint } from 'chart.js'
+import { Chart, ChartConfiguration, ChartDataset, ScatterDataPoint } from 'chart.js'
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 import AutoColors from 'chartjs-plugin-autocolors'
 import { format, parseISO } from 'date-fns'
 import { InfluxRow } from './influx'
+import { divideToInfluxTables, InfluxTableMap } from './util'
 
 Chart.register(AutoColors)
 const X_DATE_FORMAT = 'd.M. h:mm'
@@ -17,36 +18,26 @@ const toXy = (row: InfluxRow): ScatterDataPoint => ({
   y: row._value
 })
 
-export const createLineChart = async (rows: InfluxRow[]): Promise<Buffer | null> => {
-  const tableRowMap = new Map<number, InfluxRow[]>()
-  rows.forEach(r => {
-    const existing = tableRowMap.get(r.table)
-    if (existing) {
-      existing.push(r)
-    } else {
-      tableRowMap.set(r.table, [r])
-    }
-  })
-
-  const tableRows = tableRowMap.get(0) // TODO: Data from all tables
-  if (!tableRows) {
+export const createLineChart = async (tables: InfluxTableMap): Promise<Buffer | null> => {
+  if (tables.size === 0) {
     return null
   }
 
+  const datasets: ChartDataset<'line', ScatterDataPoint[]>[] = [...tables.entries()].map(([table, rows]) => ({
+    label: `${table} - ${rows.at(0)?._field ?? 'Unknown'}`,
+    data: rows.map(toXy)
+  }))
+
   const config: ChartConfiguration = {
     type: 'line',
-    data: {
-      datasets: [...tableRowMap.entries()].map(e => ({
-        label: e[1].length !== 0 ? e[1][0]._field : 'Unknown',
-        data: e[1].map(toXy)
-      }))
-    },
+    data: { datasets },
     options: {
       scales: {
         x: {
           ticks: {
             // Format x-axis timestamp labels
             callback (tick): string | null {
+              // Line chart uses the index as tick value
               if (typeof tick === 'number') {
                 const value = this.getLabelForValue(tick)
                 return format(parseISO(value), X_DATE_FORMAT)

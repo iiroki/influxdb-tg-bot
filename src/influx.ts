@@ -198,7 +198,6 @@ const getValuesFromTimespan = async (
 
     throw err
   }
-
 }
 
 export default {
