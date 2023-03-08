@@ -2,15 +2,29 @@ import { Chart, ChartConfiguration, ChartDataset, ScatterDataPoint } from 'chart
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 import AutoColors from 'chartjs-plugin-autocolors'
 import { format, parseISO } from 'date-fns'
+import { z } from 'zod'
 import { InfluxRow } from './influx'
-import { divideToInfluxTables, InfluxTableMap } from './util'
+import { InfluxTableMap } from './util'
 
 Chart.register(AutoColors)
-const X_DATE_FORMAT = 'd.M. h:mm'
+const X_DATE_FORMAT = 'd.M. H:mm'
 
 const chartNodeCanvas = new ChartJSNodeCanvas({
   width: Number(process.env.CHART_WIDTH) || 1400,
   height: Number(process.env.CHART_HEIGHT) || 1000
+})
+
+export type ChartType = 'line' | 'bar'
+export type ChartConfig = {
+  readonly min?: number
+  readonly max?: number
+  readonly color?: number
+}
+
+export const ChartConfigValidator: z.ZodType<ChartConfig> = z.object({
+  min: z.coerce.number().optional(),
+  max: z.coerce.number().optional(),
+  color: z.coerce.number().max(9999).optional()
 })
 
 const toXy = (row: InfluxRow): ScatterDataPoint => ({
@@ -18,21 +32,34 @@ const toXy = (row: InfluxRow): ScatterDataPoint => ({
   y: row._value
 })
 
-export const createLineChart = async (tables: InfluxTableMap): Promise<Buffer | null> => {
+export const createChart = async (type: ChartType, tables: InfluxTableMap, config: ChartConfig): Promise<Buffer | null> => {
   if (tables.size === 0) {
     return null
   }
 
-  const datasets: ChartDataset<'line', ScatterDataPoint[]>[] = [...tables.entries()].map(([table, rows]) => ({
-    label: `${table} - ${rows.at(0)?._field ?? 'Unknown'}`,
-    data: rows.map(toXy)
-  }))
+  const { min, max, color } = config
+  const datasets: ChartDataset<typeof type, ScatterDataPoint[]>[] = [...tables.entries()]
+    .sort((a, b) => {
+      // Sort based on the first row's timestamp
+      const aRow = a[1].at(0)
+      const bRow = b[1].at(0)
+      if (!aRow || !bRow) {
+        throw new Error('Invalid InfluxDB table rows, could not sort.')
+      }
 
-  const config: ChartConfiguration = {
-    type: 'line',
+      return aRow._time.localeCompare(bRow._time)
+    })
+    .map(([table, rows]) => ({
+      label: `${table} - ${rows.at(0)?._field ?? 'Unknown'}`,
+      data: rows.map(toXy)
+    }))
+
+  const chartjs: ChartConfiguration = {
+    type,
     data: { datasets },
     options: {
       scales: {
+        y: { min, max },
         x: {
           ticks: {
             // Format x-axis timestamp labels
@@ -49,10 +76,10 @@ export const createLineChart = async (tables: InfluxTableMap): Promise<Buffer | 
         }
       },
       plugins: {
-        autocolors: { offset: 3 } // Nicer to eyes :)
+        autocolors: { offset: color ?? 3 } // Nicer to eyes :)
       }
     }
   }
 
-  return await chartNodeCanvas.renderToBuffer(config)
+  return await chartNodeCanvas.renderToBuffer(chartjs)
 }

@@ -47,12 +47,12 @@ export type InfluxTimespan = {
 }
 
 export type InfluxTagParams = InfluxTimespan & {
-  readonly tagFilter?: string[]
   readonly tags?: string[]
 }
 
 export type InfluxAggregateParams = InfluxTagParams & {
   readonly aggregate?: string // Example: '1h' or '10m
+  readonly raw?: boolean
 }
 
 export const InfluxDbTimeValidator = z.string().regex(/^-?[0-9]+[d|h|m]$/)
@@ -63,12 +63,12 @@ export const InfluxTimespanValidator: z.ZodType<InfluxTimespan> = z.object({
 })
 
 export const InfluxTagParamsValidator: z.ZodType<InfluxTagParams> = InfluxTimespanValidator.and(z.object({
-  tagFilter: z.string().array().optional(),
   tags: z.string().array().optional()
 }))
 
 export const InfluxAggregateParamsValidator: z.ZodType<InfluxAggregateParams> = InfluxTagParamsValidator.and(z.object({
-  aggregateWindow: InfluxDbTimeValidator.optional()
+  aggregateWindow: InfluxDbTimeValidator.optional(),
+  raw: z.coerce.boolean().optional()
 }))
 
 // API
@@ -93,6 +93,10 @@ const createRange = (config: InfluxTimespan): string => {
 
   return builder.concat(')').join('')
 }
+
+const createWhereFilter = (where: TagFilter[]): string => where.length !== 0
+  ? where.map(filter => `r["${filter.tag}"] == "${filter.value}"`).join(' and ')
+  : 'true'
 
 const getBuckets = async (): Promise<InfluxBucket[]> => (
   queryApi.collectRows<InfluxBucket>('buckets()')
@@ -142,7 +146,7 @@ const getFields = async (bucket: string, measurement: string, config: InfluxTime
 const getTags = async (bucket: string, measurement: string, config: InfluxTimespan): Promise<string[] | null> => {
   const query = `
     from(bucket: "${bucket}")
-      |${createRange(config)}
+      ${createRange(config)}
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
       |> keys()
       |> group()
@@ -187,18 +191,14 @@ const getLastValue = async (
   bucket: string,
   measurement: string,
   field: string,
-  tagFilters: TagFilter[],
-  days = 30
+  where: TagFilter[],
+  config: InfluxTagParams
 ): Promise<InfluxRow[] | null> => {
-  const tagFilterExpr = tagFilters.length !== 0
-    ? tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')
-    : 'true'
-
   const query = `
     from(bucket: "${bucket}")
-      |> range(start: -${days}d)
+      ${createRange(config)}
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
-      |> filter(fn: (r) => ${tagFilterExpr})
+      |> filter(fn: (r) => ${createWhereFilter(where)})
       |> filter(fn: (r) => r["_field"] == "${field}")
       |> last()
   `
@@ -218,21 +218,17 @@ const getValuesFromTimespan = async (
   bucket: string,
   measurement: string,
   field: string,
-  tagFilters: TagFilter[],
-  days = 30,
-  aggregateWindow = '1h'
+  where: TagFilter[],
+  config: InfluxAggregateParams
 ): Promise<InfluxRow[] | null> => {
-  const tagFilterExpr = tagFilters.length !== 0
-    ? tagFilters.map(f => `r["${f.tag}"] == "${f.value}"`).join(' and ')
-    : 'true'
-
+  const { aggregate, raw } = config
   const query = `
     from(bucket: "${bucket}")
-      |> range(start: -${days}d)
+      ${createRange(config)}
       |> filter(fn: (r) => r["_measurement"] == "${measurement}")
-      |> filter(fn: (r) => ${tagFilterExpr})
+      |> filter(fn: (r) => ${createWhereFilter(where)})
       |> filter(fn: (r) => r["_field"] == "${field}")
-      |> aggregateWindow(every: ${aggregateWindow}, fn: mean, createEmpty: false)
+      ${raw ? '' : `|> aggregateWindow(every: ${aggregate ?? '1h'}, fn: mean, createEmpty: false)`}
   `
 
   try {

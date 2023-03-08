@@ -1,9 +1,20 @@
 import { Context, Telegraf } from 'telegraf'
 import { Message, Update } from 'telegraf/types'
 import { z, ZodError } from 'zod'
-import { createLineChart } from './chart'
-import influx, { InfluxTimespan, InfluxTimespanValidator, TagFilter } from './influx'
-import { createMdBlock, createMdHeader, tableTest, toInfluxRowMdList, toMdList } from './md'
+import { ChartConfigValidator, createChart } from './chart'
+import influx, {
+  InfluxAggregateParamsValidator,
+  InfluxTagParamsValidator,
+  InfluxTimespanValidator,
+  TagFilter
+} from './influx'
+import {
+  createMdBlock,
+  createMdHeader,
+  toInfluxTableTagMdList,
+  toInfluxRowMdList,
+  toMdList
+} from './md'
 import { divideToInfluxTables } from './util'
 
 type TgMessageUpdate = Context<Update> & {
@@ -63,7 +74,7 @@ export class InfluxTelegramBot {
     this.bot.command('fields', this.handleGetFields.bind(this))
     this.bot.command('tags', this.handleGetTags.bind(this))
     this.bot.command('tag', this.handleGetTagValues.bind(this))
-    this.bot.command('current', this.handleGetCurrentValues.bind(this))
+    this.bot.command('get', this.handleGetValues.bind(this))
     this.bot.command('chart', this.handleGetChart.bind(this))
 
     // Unknown command
@@ -148,51 +159,55 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
   }
 
-  private async handleGetCurrentValues(ctx: TgMessageUpdate) {
+  private async handleGetValues(ctx: TgMessageUpdate) {
     const params = this.getCommandParams(ctx.message?.text)
-    if (params.length < 3) {
+    if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
-        this.createUsageText('/current <bucket> <measurement> <field> [<config>]')
+        this.createUsageText('/get <bucket> <measurement> <field> <where> [<config>]')
       )
     }
 
-    // Source: https://stackoverflow.com/a/19156525
-    const [bucket, measurement, field, tagFilterStr = '*', shownTags] = params
-    const tagFilters: TagFilter[] = this.parseTagFilters(tagFilterStr)
-
-    const rows = await influx.getLastValue(bucket, measurement, field, tagFilters)
-    if (!rows) {
+    const [bucket, measurement, field, whereStr, configStr] = params
+    const where = this.parseWhere(whereStr)
+    const config = InfluxTagParamsValidator.parse(this.parseConfig(configStr))
+    const rows = await influx.getLastValue(bucket, measurement, field, where, config)
+    if (!rows || rows.length === 0) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No values found.`))
     }
 
     await ctx.replyWithMarkdownV2(
-      toInfluxRowMdList(rows, { header: 'Current values', shownTags: shownTags?.split(',') })
+      toInfluxRowMdList(rows, { header: 'Values', tags: config.tags })
     )
   }
 
   private async handleGetChart(ctx: TgMessageUpdate) {
     const params = this.getCommandParams(ctx.message?.text)
-    if (params.length < 3) {
+    if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
-        this.createUsageText('/chart <bucket> <measurement> <field> [<config>]')
+        this.createUsageText('/chart <type> <bucket> <measurement> <field> <where> [<config>]')
       )
     }
 
-    const [bucket, measurement, field, tagFilterStr = '*', daysStr, aggregateWindow] = params
-    const tagFilters: TagFilter[] = this.parseTagFilters(tagFilterStr)
-    const days = Number(daysStr) || 7 // Default: 7 days / 1 week
-    const rows = await influx.getValuesFromTimespan(bucket, measurement, field, tagFilters, days, aggregateWindow)
+    const [typeStr, bucket, measurement, field, whereStr, configStr] = params
+    const type = z.union([z.literal('line'), z.literal('bar')]).parse(typeStr)
+    const where = this.parseWhere(whereStr)
+    const config = InfluxAggregateParamsValidator.and(ChartConfigValidator).parse(this.parseConfig(configStr))
+    const rows = await influx.getValuesFromTimespan(bucket, measurement, field, where, config)
     if (!rows || rows.length === 0) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No values found.`))
     }
 
     const tables = divideToInfluxTables(rows)
-    const source = await createLineChart(tables)
+    const source = await createChart(type, tables, config)
     if (!source) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Could not create a chart.`))
     }
 
-    const caption = tableTest(tables, 'Chart tags')
+    const caption = toInfluxTableTagMdList(tables, {
+      header: 'Chart tags',
+      tags: config.tags
+    })
+
     await ctx.replyWithPhoto({ source }, { caption, parse_mode: 'MarkdownV2' })
   }
 
@@ -201,9 +216,11 @@ export class InfluxTelegramBot {
     return text ? text.match(/(?:[^\s"]+|"[^"]*")+/g)?.slice(1) ?? [] : []
   }
 
-  private parseTagFilters(tagFilterStr: string): TagFilter[] {
-    return (tagFilterStr === '*' ? [] : tagFilterStr.split(',')).map(f => {
+  // Source: https://stackoverflow.com/a/19156525
+  private parseWhere(whereStr: string): TagFilter[] {
+    return (whereStr === '*' ? [] : whereStr.split(',')).map(f => {
       const [tag, value] = f.split('=')
+      // TODO: Handle undefined "tag"/"value"
       return { tag, value: value.replace(/^"(.*)"$/, '$1') }
     })
   }
@@ -228,7 +245,6 @@ export class InfluxTelegramBot {
       }
     }
 
-    console.log('CONFIG:', config)
     return config
   }
 
