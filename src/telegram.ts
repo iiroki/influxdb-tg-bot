@@ -12,7 +12,7 @@ type TgMessageUpdate = Context<Update> & {
 
 const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
-const ERROR_PREFIX_MD = '[ERROR]'
+const ERROR_PREFIX = '[ERROR]'
 
 export class InfluxTelegramBot {
   private readonly bot: Telegraf
@@ -34,7 +34,7 @@ export class InfluxTelegramBot {
       const username = ctx.message?.from.username
       if (!username || !this.allowedUsernames.has(username)) {
         // TODO: This is currently triggered by edited messages
-        await ctx.reply(`${ERROR_PREFIX_MD} Unauthorized user!`)
+        await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Unauthorized user!`))
       } else {
         await next()
       }
@@ -49,12 +49,15 @@ export class InfluxTelegramBot {
     this.bot.catch((err, ctx) => {
       this.log(`Unhandled error: ${ctx}`, err)
       if (err instanceof ZodError) {
-        ctx.replyWithMarkdownV2(`${ERROR_PREFIX_MD} Invalid configuration:\n${createMdBlock(err.message)}`)
+        ctx.replyWithMarkdownV2(
+          createMdBlock(`${createMdHeader(`${ERROR_PREFIX} Invalid configuration`)}\n${err.message}`)
+        )
       } else {
-        ctx.replyWithMarkdownV2(`${ERROR_PREFIX_MD} Sorry, an unknown error occurred :\\(`)
+        ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Sorry, an unknown error occurred :(`))
       }
     })
 
+    // Commands
     this.bot.command('buckets', this.handleGetBuckets.bind(this))
     this.bot.command('measurements', this.handleGetMeasurements.bind(this))
     this.bot.command('fields', this.handleGetFields.bind(this))
@@ -62,7 +65,12 @@ export class InfluxTelegramBot {
     this.bot.command('tag', this.handleGetTagValues.bind(this))
     this.bot.command('current', this.handleGetCurrentValues.bind(this))
     this.bot.command('chart', this.handleGetChart.bind(this))
-    this.bot.on('text', async ctx => ctx.reply(`${ERROR_PREFIX_MD} Beep boop, don\'t undestand...`))
+
+    // Unknown command
+    this.bot.on('text', async ctx => ctx.replyWithMarkdownV2(
+      createMdBlock(`${ERROR_PREFIX} Beep boop, don\'t undestand...`)
+    ))
+
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
 
@@ -86,7 +94,7 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
     const measurements = await influx.getMeasurements(bucket, config)
     if (!measurements) {
-      return await ctx.replyWithMarkdownV2(`${ERROR_PREFIX_MD} No measurements found.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No measurements found.`))
     }
 
     await ctx.replyWithMarkdownV2(toMdList(measurements.map(m => m._measurement), 'Measurements'))
@@ -102,7 +110,7 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
     const fields = await influx.getFields(bucket, measurement, config)
     if (!fields) {
-      return await ctx.reply(`${ERROR_PREFIX_MD} No fields found.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No fields found.`))
     }
 
     await ctx.replyWithMarkdownV2(toMdList(fields, 'Fields'))
@@ -118,7 +126,7 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
     const tags = await influx.getTags(bucket, measurement, config)
     if (!tags) {
-      return await ctx.reply(`${ERROR_PREFIX_MD} No tags found.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No tags found.`))
     }
 
     await ctx.replyWithMarkdownV2(toMdList(tags, 'Tags'))
@@ -134,7 +142,7 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
     const tagValues = await influx.getTagValues(bucket, measurement, tag, config)
     if (!tagValues) {
-      return await ctx.reply(`${ERROR_PREFIX_MD} No tag values found.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No tag values found.`))
     }
 
     await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
@@ -154,7 +162,7 @@ export class InfluxTelegramBot {
 
     const rows = await influx.getLastValue(bucket, measurement, field, tagFilters)
     if (!rows) {
-      return await ctx.reply(`${ERROR_PREFIX_MD} No values found.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No values found.`))
     }
 
     await ctx.replyWithMarkdownV2(
@@ -175,13 +183,13 @@ export class InfluxTelegramBot {
     const days = Number(daysStr) || 7 // Default: 7 days / 1 week
     const rows = await influx.getValuesFromTimespan(bucket, measurement, field, tagFilters, days, aggregateWindow)
     if (!rows || rows.length === 0) {
-      return await ctx.reply(`${ERROR_PREFIX_MD} No values found.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No values found.`))
     }
 
     const tables = divideToInfluxTables(rows)
     const source = await createLineChart(tables)
     if (!source) {
-      return await ctx.reply(`${ERROR_PREFIX_MD} Could not create a chart.`)
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Could not create a chart.`))
     }
 
     const caption = tableTest(tables, 'Chart tags')
@@ -210,6 +218,10 @@ export class InfluxTelegramBot {
     for (const item of str.split(';')) {
       // Example: "tagFilter=tag1,tag2" or "start=7d"
       const [key, valueWithQuotes] = item.split('=')
+      if (!valueWithQuotes) {
+        continue
+      }
+
       const value = valueWithQuotes.replace(/^"(.*)"$/, '$1')
       if (key && value) {
         config[key] = value.includes(',') ? value.split(',') : value
@@ -221,7 +233,7 @@ export class InfluxTelegramBot {
   }
 
   private createUsageText(usage: string): string {
-    return createMdBlock(`${createMdHeader(`${ERROR_PREFIX_MD} Usage`)}\n${usage}`)
+    return createMdBlock(`${createMdHeader(`${ERROR_PREFIX} Usage`)}\n${usage}`)
   }
 
   private log(...args: any[]) {
