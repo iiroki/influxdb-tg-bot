@@ -1,68 +1,72 @@
-import { format, formatDistance, parseISO } from 'date-fns'
-import { InfluxRow } from './influx'
+import { formatDistance, parseISO } from 'date-fns'
+import { InfluxRow } from './influx/model'
+import { getInfluxRowFieldName, getInfluxTags, InfluxTableMap } from './util'
 
-const MD_ESCAPED_CHARS = new Set([
-  '-',
-  '_',
-  '(',
-  ')',
-  '[',
-  ']',
-  '.',
-  ','
-])
-
-const ROW_INDENT = ' '.repeat(4)
-
-const IGNORED_INFLUX_PROPERTIES: Set<keyof InfluxRow> = new Set(['result', 'table'])
-
-const escapeMd = (text: string) => {
-  let escaped = ''
-  for (const char of text) {
-    if (MD_ESCAPED_CHARS.has(char)) {
-      escaped += '\\'
-    }
-
-    escaped += char
-  }
-
-  return escaped
-}
+const ROW_INDENT = ' '.repeat(2)
+export const createMdHeader = (header: string): string => `${header}:\n${'='.repeat(header.length + 1)}`
+export const createMdBlock = (text: string): string => '```\n' + text + '\n```'
 
 export const toMdList = (items: any[], header?: string): string => {
   const builder: string[] = []
   if (header) {
-    builder.push(`*${header}:*`)
+    builder.push(createMdHeader(header))
   }
 
-  items.forEach(item => builder.push(`${ROW_INDENT}\`${typeof item === 'object' ? JSON.stringify(item) : item}\``))
-  return escapeMd(builder.join('\n'))
+  items.forEach(item => builder.push(`\`${typeof item === 'object' ? JSON.stringify(item) : item}\``))
+  return createMdBlock(builder.join('\n'))
 }
 
 export const toInfluxRowMdList = (
   rows: InfluxRow[],
   config: {
     readonly header?: string
-    readonly shownTags?: string[]
+    readonly tags?: string[]
   }
 ): string => {
-  const { header, shownTags } = config
+  const { header, tags } = config
   const builder: string[] = []
   if (header) {
-    builder.push(`*${header}:*`)
+    builder.push(createMdHeader(header))
   }
 
+  const now = new Date()
   rows.forEach(r => {
-    builder.push(`${ROW_INDENT}\`${r._field}\`: \`${r._value}\``)
-    Object.entries(r).filter(e => !(e[0].startsWith('_') || IGNORED_INFLUX_PROPERTIES.has(e[0]))).forEach(tag => {
-      if (!shownTags || shownTags.includes(tag[0])) {
-        builder.push(`${ROW_INDENT}- \`${tag[0]}\`: \`${tag[1]}\``)
+    builder.push(`\`${r._field}\`: \`${r._value}\``)
+    getInfluxTags(r).forEach(t => {
+      if (!tags || tags.includes(t[0])) {
+        builder.push(`${ROW_INDENT}# \`${t[0]}\`: \`${t[1]}\``)
       }
     })
 
-    builder.push(`${ROW_INDENT}  (${formatDistance(parseISO(r._time), new Date(), { includeSeconds: true })} ago)`)
+    builder.push(`${ROW_INDENT}(${formatDistance(parseISO(r._time), now, { includeSeconds: true })} ago)`)
     builder.push('')
   })
 
-  return escapeMd(builder.join('\n'))
+  return createMdBlock(builder.join('\n'))
+}
+
+export const toInfluxTableTagMdList = (
+  tables: InfluxTableMap,
+  config: {
+    readonly header?: string
+    readonly tags?: string[]
+  }
+): string => {
+  const { header, tags } = config
+  const builder: string[] = []
+  if (header) {
+    builder.push(createMdHeader(header))
+  }
+
+  for (const [table, rows] of [...tables.entries()]) {
+    builder.push(`${table} - \`${getInfluxRowFieldName(rows)}\``)
+
+    getInfluxTags(rows)
+      .filter(([k]) => !tags || tags.includes(k)) // Show only the specified tags
+      .forEach(([k, v]) => builder.push(`${ROW_INDENT}# \`${k}\`: \`${v}\``))
+
+    builder.push('')
+  }
+
+  return createMdBlock(builder.join('\n'))
 }
