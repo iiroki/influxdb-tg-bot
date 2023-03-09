@@ -1,6 +1,6 @@
 {
   "name": "influxdb-tg-bot",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Telegram bot for InfluxDB.",
   "author": "iiroki",
   "main": "src/index.ts",
