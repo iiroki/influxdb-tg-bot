@@ -3,7 +3,7 @@ import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 import AutoColors from 'chartjs-plugin-autocolors'
 import { format, parseISO } from 'date-fns'
 import { z } from 'zod'
-import { InfluxRow } from './influx'
+import { InfluxRow } from './influx/model'
 import { InfluxTableMap } from './util'
 
 Chart.register(AutoColors)

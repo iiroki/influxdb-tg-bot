@@ -1,4 +1,4 @@
-import { InfluxRow } from './influx'
+import { InfluxRow } from './influx/model'
 
 export type InfluxTableMap = Map<number, InfluxRow[]>
 

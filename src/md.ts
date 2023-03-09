@@ -1,5 +1,5 @@
-import { format, formatDistance, parseISO } from 'date-fns'
-import { InfluxRow } from './influx'
+import { formatDistance, parseISO } from 'date-fns'
+import { InfluxRow } from './influx/model'
 import { getInfluxRowFieldName, getInfluxTags, InfluxTableMap } from './util'
 
 const ROW_INDENT = ' '.repeat(2)

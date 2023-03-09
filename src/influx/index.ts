@@ -1,75 +1,8 @@
 import { HttpError, InfluxDB } from '@influxdata/influxdb-client'
-import { z } from 'zod'
+import { InfluxAggregateParams, InfluxBucket, InfluxField, InfluxKey, InfluxMeasurement, InfluxRow, InfluxTagParams, InfluxTimespan, InfluxTagFilter } from './model'
 
 // Models
 
-export type TagFilter = {
-  readonly tag: string
-  readonly value: string
-}
-
-export type InfluxBucket = {
-  readonly id: string
-  readonly name: string
-  readonly table: number
-  readonly retentionPolicy: string
-  readonly retentionPeriod: number
-  readonly result: string
-  readonly organizationID: string
-}
-
-export type InfluxMeasurement = {
-  readonly _measurement: string
-}
-
-export type InfluxField = {
-  readonly _field: string
-}
-
-export type InfluxKey = {
-  readonly _value: string
-}
-
-export type InfluxValue = {
-  readonly _value: number
-}
-
-export type InfluxRow = InfluxMeasurement & InfluxField & InfluxValue & {
-  readonly _time: string // UTC
-  readonly result: string
-  readonly table: number
-  readonly [key: string]: string | number
-}
-
-export type InfluxTimespan = {
-  readonly start?: string // InfluxDB time ('7d', '1h', '5m') or ISO date ('2023-02-028T19:00:00Z')
-  readonly end?: string // InfluxDB time ('7d', '1h', '5m') or ISO date ('2023-02-028T19:00:00Z')
-}
-
-export type InfluxTagParams = InfluxTimespan & {
-  readonly tags?: string[]
-}
-
-export type InfluxAggregateParams = InfluxTagParams & {
-  readonly aggregate?: string // Example: '1h' or '10m
-  readonly raw?: boolean
-}
-
-export const InfluxDbTimeValidator = z.string().regex(/^-?[0-9]+[d|h|m]$/)
-
-export const InfluxTimespanValidator: z.ZodType<InfluxTimespan> = z.object({
-  start: InfluxDbTimeValidator.or(z.string().datetime({ precision: 0 })).optional(),
-  end: InfluxDbTimeValidator.or(z.string().datetime({ precision: 0 })).optional()
-})
-
-export const InfluxTagParamsValidator: z.ZodType<InfluxTagParams> = InfluxTimespanValidator.and(z.object({
-  tags: z.string().array().optional()
-}))
-
-export const InfluxAggregateParamsValidator: z.ZodType<InfluxAggregateParams> = InfluxTagParamsValidator.and(z.object({
-  aggregateWindow: InfluxDbTimeValidator.optional(),
-  raw: z.coerce.boolean().optional()
-}))
 
 // API
 
@@ -94,7 +27,7 @@ const createRange = (config: InfluxTimespan): string => {
   return builder.concat(')').join('')
 }
 
-const createWhereFilter = (where: TagFilter[]): string => where.length !== 0
+const createWhereFilter = (where: InfluxTagFilter[]): string => where.length !== 0
   ? where.map(filter => `r["${filter.tag}"] == "${filter.value}"`).join(' and ')
   : 'true'
 
@@ -191,7 +124,7 @@ const getLastValue = async (
   bucket: string,
   measurement: string,
   field: string,
-  where: TagFilter[],
+  where: InfluxTagFilter[],
   config: InfluxTagParams
 ): Promise<InfluxRow[] | null> => {
   const query = `
@@ -218,7 +151,7 @@ const getValuesFromTimespan = async (
   bucket: string,
   measurement: string,
   field: string,
-  where: TagFilter[],
+  where: InfluxTagFilter[],
   config: InfluxAggregateParams
 ): Promise<InfluxRow[] | null> => {
   const { aggregate, raw } = config

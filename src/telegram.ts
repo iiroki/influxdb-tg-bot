@@ -2,12 +2,13 @@ import { Context, Telegraf } from 'telegraf'
 import { Message, Update } from 'telegraf/types'
 import { z, ZodError } from 'zod'
 import { ChartConfigValidator, createChart } from './chart'
-import influx, {
+import influx from './influx'
+import {
   InfluxAggregateParamsValidator,
   InfluxTagParamsValidator,
   InfluxTimespanValidator,
-  TagFilter
-} from './influx'
+  InfluxTagFilter
+} from './influx/model'
 import {
   createMdBlock,
   createMdHeader,
@@ -217,7 +218,7 @@ export class InfluxTelegramBot {
   }
 
   // Source: https://stackoverflow.com/a/19156525
-  private parseWhere(whereStr: string): TagFilter[] {
+  private parseWhere(whereStr: string): InfluxTagFilter[] {
     return (whereStr === '*' ? [] : whereStr.split(',')).map(f => {
       const [tag, value] = f.split('=')
       // TODO: Handle undefined "tag"/"value"
