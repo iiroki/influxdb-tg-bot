@@ -215,3 +215,7 @@ The used aggregate function is mean/average.
     - Default: `1h`
 - `raw`: Whether to query raw values from InfluxDB (= disable aggregation).
     - Default: -
+
+## License
+
+**MIT License** Copyright (c) 2023 Iiro Kiviluoma
