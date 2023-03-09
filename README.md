@@ -1,6 +1,6 @@
 # InfluxDB Telegram Bot
 
-Telegram bot for InfluxDB.
+**_Telegram bot for InfluxDB._**
 
 <img src="./docs/telegram.png" height="600">
 
@@ -61,13 +61,14 @@ The bot implements the following commands:
 
 | Command | Description |
 | ----- | ----- |
+| `/help` | Get link to this section. |
 | [`buckets`](#buckets) | List all buckets. |
 | [`measurements`](#measurements) | List all measurements in a bucket. |
 | [`fields`](#fields) | List all fields of a measurement. |
 | [`tags`](#tags) | List all tags of a measurement. |
 | [`tag`](#tag) | List all values of a tag. |
 | [`get`](#get) | Read values for a field. |
-| [`graph`](#graph) | Create a graph visualization of field values. |
+| [`chart`](#chart) | Create a chart visualization of field values. |
 
 **NOTE:** Brackets `[...]` indicate optional parameters!
 
@@ -144,9 +145,9 @@ The values can be filtered by specifying InfluxDB tag filter.
     - Specify InfluxDB query timespan.
     - Specify the shown InfluxDB tags in the command response.
 
-### `graph`
+### `chart`
 
-**Usage: `/graph <type> <bucket> <measurement> <field> <where> [<config>]`**
+**Usage: `/chart <type> <bucket> <measurement> <field> <where> [<config>]`**
 
 Create [Chart.js](https://www.chartjs.org/) visualization of InfluxDB field.
 The command returns InfluxDB fields as graph labels and tags as image caption.

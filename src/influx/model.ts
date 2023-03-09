@@ -44,7 +44,7 @@ export type InfluxTimespanParams = {
 }
 
 export type InfluxTagParams = InfluxTimespanParams & {
-  readonly tags?: string[]
+  readonly tags?: string | string[]
 }
 
 export type InfluxAggregateParams = InfluxTagParams & {
@@ -60,7 +60,7 @@ export const InfluxTimespanParamsValidator: z.ZodType<InfluxTimespanParams> = z.
 })
 
 export const InfluxTagParamsValidator: z.ZodType<InfluxTagParams> = InfluxTimespanParamsValidator.and(z.object({
-  tags: z.string().array().optional()
+  tags: z.string().or(z.string().array()).optional()
 }))
 
 export const InfluxAggregateParamsValidator: z.ZodType<InfluxAggregateParams> = InfluxTagParamsValidator.and(z.object({

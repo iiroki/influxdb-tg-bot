@@ -16,7 +16,7 @@ import {
   toInfluxRowMdList,
   toMdList
 } from './md'
-import { divideToInfluxTables } from './util'
+import { divideToInfluxTables, toArrayOrUndefined } from './util'
 
 type TgMessageUpdate = Context<Update> & {
   readonly message: Message.TextMessage
@@ -95,7 +95,7 @@ export class InfluxTelegramBot {
 
   private async handleGetHelp(ctx: TgMessageUpdate) {
     await ctx.replyWithMarkdownV2(
-      `${createMdBlock(createMdHeader(`Command documentation`))}[GitHub](https://github.com/iiroki/influxdb-tg-bot#commands)`
+      `${createMdBlock(createMdHeader(`Help`))}[GitHub \\- Commands](https://github.com/iiroki/influxdb-tg-bot#commands)`
     )
   }
 
@@ -185,7 +185,7 @@ export class InfluxTelegramBot {
     }
 
     await ctx.replyWithMarkdownV2(
-      toInfluxRowMdList(rows, { header: 'Values', tags: config.tags })
+      toInfluxRowMdList(rows, { header: 'Values', tags: toArrayOrUndefined(config.tags) })
     )
   }
 
@@ -214,7 +214,7 @@ export class InfluxTelegramBot {
 
     const caption = toInfluxTableTagMdList(tables, {
       header: 'Chart tags',
-      tags: config.tags
+      tags: toArrayOrUndefined(config.tags)
     })
 
     await ctx.replyWithPhoto({ source }, { caption, parse_mode: 'MarkdownV2' })

@@ -42,3 +42,11 @@ export const getInfluxTags = (rows: InfluxRow | InfluxRow[]): [string, string][]
 }
 
 export const getInfluxRowFieldName = (rows: InfluxRow[]): string => rows.at(0)?._field ?? 'Unknown'
+
+export const toArrayOrUndefined = <T>(value: T | T[] | undefined): T[] | undefined => {
+  if (value === undefined) {
+    return undefined
+  }
+
+  return Array.isArray(value) ? value : [value]
+}
