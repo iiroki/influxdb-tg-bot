@@ -6,8 +6,8 @@
 
 **Features:**
 - Browse InfluxDB schema
-- Read latest values
-- Create graph visualizations from a timespan
+- Read values from InfluxDB
+- Create chart visualizations from InfluxDB field values
 - TODO: Define notification rules and send notifications
 
 ## Quickstart
