@@ -38,12 +38,12 @@ export type InfluxTagFilter = {
   readonly value: string
 }
 
-export type InfluxTimespan = {
+export type InfluxTimespanParams = {
   readonly start?: string // InfluxDB time ('7d', '1h', '5m') or ISO date ('2023-02-028T19:00:00Z')
   readonly end?: string // InfluxDB time ('7d', '1h', '5m') or ISO date ('2023-02-028T19:00:00Z')
 }
 
-export type InfluxTagParams = InfluxTimespan & {
+export type InfluxTagParams = InfluxTimespanParams & {
   readonly tags?: string[]
 }
 
@@ -52,18 +52,18 @@ export type InfluxAggregateParams = InfluxTagParams & {
   readonly raw?: boolean
 }
 
-export const InfluxDbTimeValidator = z.string().regex(/^-?[0-9]+[d|h|m]$/)
+export const InfluxRelativeTimeValidator = z.string().regex(/^-?[0-9]+[d|h|m]$/)
 
-export const InfluxTimespanValidator: z.ZodType<InfluxTimespan> = z.object({
-  start: InfluxDbTimeValidator.or(z.string().datetime({ precision: 0 })).optional(),
-  end: InfluxDbTimeValidator.or(z.string().datetime({ precision: 0 })).optional()
+export const InfluxTimespanParamsValidator: z.ZodType<InfluxTimespanParams> = z.object({
+  start: InfluxRelativeTimeValidator.or(z.string().datetime({ precision: 0 })).optional(),
+  end: InfluxRelativeTimeValidator.or(z.string().datetime({ precision: 0 })).optional()
 })
 
-export const InfluxTagParamsValidator: z.ZodType<InfluxTagParams> = InfluxTimespanValidator.and(z.object({
+export const InfluxTagParamsValidator: z.ZodType<InfluxTagParams> = InfluxTimespanParamsValidator.and(z.object({
   tags: z.string().array().optional()
 }))
 
 export const InfluxAggregateParamsValidator: z.ZodType<InfluxAggregateParams> = InfluxTagParamsValidator.and(z.object({
-  aggregateWindow: InfluxDbTimeValidator.optional(),
+  aggregateWindow: InfluxRelativeTimeValidator.optional(),
   raw: z.coerce.boolean().optional()
 }))

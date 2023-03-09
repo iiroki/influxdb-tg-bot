@@ -6,7 +6,7 @@ import influx from './influx'
 import {
   InfluxAggregateParamsValidator,
   InfluxTagParamsValidator,
-  InfluxTimespanValidator,
+  InfluxTimespanParamsValidator,
   InfluxTagFilter
 } from './influx/model'
 import {
@@ -70,6 +70,8 @@ export class InfluxTelegramBot {
     })
 
     // Commands
+    this.bot.command('start', this.handleGetHelp.bind(this))
+    this.bot.command('help', this.handleGetHelp.bind(this))
     this.bot.command('buckets', this.handleGetBuckets.bind(this))
     this.bot.command('measurements', this.handleGetMeasurements.bind(this))
     this.bot.command('fields', this.handleGetFields.bind(this))
@@ -91,6 +93,12 @@ export class InfluxTelegramBot {
     this.log('Started.')
   }
 
+  private async handleGetHelp(ctx: TgMessageUpdate) {
+    await ctx.replyWithMarkdownV2(
+      `${createMdBlock(createMdHeader(`Command documentation`))}[GitHub](https://github.com/iiroki/influxdb-tg-bot#commands)`
+    )
+  }
+
   private async handleGetBuckets(ctx: TgMessageUpdate) {
     const buckets = await influx.getBuckets()
     await ctx.replyWithMarkdownV2(toMdList(buckets.map(b => b.name), 'Buckets'))
@@ -103,7 +111,7 @@ export class InfluxTelegramBot {
     }
     
     const [bucket, configStr] = params
-    const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
+    const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const measurements = await influx.getMeasurements(bucket, config)
     if (!measurements) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No measurements found.`))
@@ -119,7 +127,7 @@ export class InfluxTelegramBot {
     }
 
     const [bucket, measurement, configStr] = params
-    const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
+    const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const fields = await influx.getFields(bucket, measurement, config)
     if (!fields) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No fields found.`))
@@ -135,7 +143,7 @@ export class InfluxTelegramBot {
     }
 
     const [bucket, measurement, configStr] = params
-    const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
+    const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const tags = await influx.getTags(bucket, measurement, config)
     if (!tags) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No tags found.`))
@@ -151,7 +159,7 @@ export class InfluxTelegramBot {
     }
 
     const [bucket, measurement, tag, configStr] = params
-    const config = InfluxTimespanValidator.parse(this.parseConfig(configStr))
+    const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const tagValues = await influx.getTagValues(bucket, measurement, tag, config)
     if (!tagValues) {
       return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No tag values found.`))

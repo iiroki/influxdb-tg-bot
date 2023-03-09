@@ -1,5 +1,5 @@
 import { HttpError, InfluxDB } from '@influxdata/influxdb-client'
-import { InfluxAggregateParams, InfluxBucket, InfluxField, InfluxKey, InfluxMeasurement, InfluxRow, InfluxTagParams, InfluxTimespan, InfluxTagFilter } from './model'
+import { InfluxAggregateParams, InfluxBucket, InfluxField, InfluxKey, InfluxMeasurement, InfluxRow, InfluxTagParams, InfluxTimespanParams, InfluxTagFilter } from './model'
 
 // Models
 
@@ -16,7 +16,7 @@ if (!INFLUX_URL || !INFLUX_TOKEN || !INFLUX_ORG) {
 
 const queryApi = new InfluxDB({ url: INFLUX_URL, token: INFLUX_TOKEN }).getQueryApi(INFLUX_ORG)
 
-const createRange = (config: InfluxTimespan): string => {
+const createRange = (config: InfluxTimespanParams): string => {
   const builder: string[] = ['|> range(']
 
   builder.push(`start: ${config.start ?? '-7d'}`)
@@ -35,7 +35,7 @@ const getBuckets = async (): Promise<InfluxBucket[]> => (
   queryApi.collectRows<InfluxBucket>('buckets()')
 )
 
-const getMeasurements = async (bucket: string, config: InfluxTimespan): Promise<InfluxMeasurement[] | null> => {
+const getMeasurements = async (bucket: string, config: InfluxTimespanParams): Promise<InfluxMeasurement[] | null> => {
   const query = `
     from(bucket: "${bucket}")
       ${createRange(config)}
@@ -55,7 +55,7 @@ const getMeasurements = async (bucket: string, config: InfluxTimespan): Promise<
   }
 }
 
-const getFields = async (bucket: string, measurement: string, config: InfluxTimespan): Promise<string[] | null> => {
+const getFields = async (bucket: string, measurement: string, config: InfluxTimespanParams): Promise<string[] | null> => {
   const query = `
     from(bucket: "${bucket}")
       ${createRange(config)}
@@ -76,7 +76,7 @@ const getFields = async (bucket: string, measurement: string, config: InfluxTime
   }
 }
 
-const getTags = async (bucket: string, measurement: string, config: InfluxTimespan): Promise<string[] | null> => {
+const getTags = async (bucket: string, measurement: string, config: InfluxTimespanParams): Promise<string[] | null> => {
   const query = `
     from(bucket: "${bucket}")
       ${createRange(config)}
@@ -98,7 +98,7 @@ const getTags = async (bucket: string, measurement: string, config: InfluxTimesp
   }
 }
 
-const getTagValues = async (bucket: string, measurement: string, tag: string, config: InfluxTimespan): Promise<string[] | null> => {
+const getTagValues = async (bucket: string, measurement: string, tag: string, config: InfluxTimespanParams): Promise<string[] | null> => {
   const query = `
     from(bucket: "${bucket}")
       ${createRange(config)}

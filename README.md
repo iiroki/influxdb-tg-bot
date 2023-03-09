@@ -7,7 +7,7 @@ Telegram bot for InfluxDB.
 **Features:**
 - Browse InfluxDB schema
 - Read latest values
-- TODO: Create graph visualizations from a timespan
+- Create graph visualizations from a timespan
 - TODO: Define notification rules and send notifications
 
 ## Quickstart
@@ -45,24 +45,6 @@ The bot has a deployment template in order to deploy the bot to [Fly.io](https:/
     flyctl deploy
     ```
 
-## Commands
-
-The bot implements the following commands:
-
-| Command | Parameters | Description |
-| ----- | ----- | ----- |
-| `/buckets` | - | List all buckets. |
-| `/measurements` | `<bucket>` | List all measurements in a bucket. |
-| `/fields` | `<bucket> <measurement>` | List all fields of a measurement in a bucket. |
-| `/tags` | `<bucket> <measurement>` | List all tags of a measurement in a bucket. |
-| `/tag` | `<bucket> <measurement> <tag>` | List all values of a measurement's tag in a bucket. |
-| `/latest` | `<bucket> <measurement> <field> <tagFilters> [<shownTags>]`**\*** | Get the latest value(s) for a fields that match the tag filter. |
-
-**\*** `tagFilters` and `shownTags` are in the following format:
-- `tagFilters`: Comma separated list of tag filters in key-value pairs (Example: `location=home,host=server`).
-  - `*` can be used to match all values!
-- `shownTags`: Comma separated list of tag names (Example: `location,host`).
-
 ## Configuration
 
 | Env variable | Description |
@@ -72,3 +54,163 @@ The bot implements the following commands:
 | `INFLUX_URL` | InfluxDB URL |
 | `INFLUX_TOKEN` | InfluxDB API token |
 | `INFLUX_ORG` | InfluxDB organization |
+
+## Commands
+
+The bot implements the following commands:
+
+| Command | Description |
+| ----- | ----- |
+| [`buckets`](#buckets) | List all buckets. |
+| [`measurements`](#measurements) | List all measurements in a bucket. |
+| [`fields`](#fields) | List all fields of a measurement. |
+| [`tags`](#tags) | List all tags of a measurement. |
+| [`tag`](#tag) | List all values of a tag. |
+| [`get`](#get) | Read values for a field. |
+| [`graph`](#graph) | Create a graph visualization of field values. |
+
+**NOTE:** Brackets `[...]` indicate optional parameters!
+
+### `buckets`
+
+**Usage: `/buckets`**
+
+List all InfluxDB buckets.
+
+### `measurements`
+
+**Usage: `/measurements <bucket>  [<config>]`**
+
+List all measurements in InfluxDB bucket.
+
+**Params:**
+- `bucket`: InfluxDB bucket name
+- `config`: See [`InfluxTimespanParams`](#influxtimespanparams) in [`<config>`](#config).
+    - Specify InfluxDB query timespan.
+
+### `fields`
+
+**Usage: `/fields <bucket> <measurement> [<config>]`**
+
+List all fields of InfluxDB measurement.
+
+**Params:**
+- `bucket`: InfluxDB bucket name
+- `measurement`: InfluxDB measurement name
+- `config`: See [`InfluxTimespanParams`](#influxtimespanparams) in [`<config>`](#config).
+    - Specify InfluxDB query timespan.
+
+### `tags`
+
+**Usage: `/tags <bucket> <measurement> [<config>]`**
+
+List all tags of InfluxDB measurement.
+
+**Params:**
+- `bucket`: InfluxDB bucket name
+- `measurement`: InfluxDB measurement name
+- `config`: See [`InfluxTimespanParams`](#influxtimespanparams) in [`<config>`](#config).
+    - Specify InfluxDB query timespan.
+
+### `tag`
+
+**Usage: `/tag <bucket> <measurement> <tag> [<config>]`**
+
+List all tags of InfluxDB measurement.
+
+**Params:**
+- `bucket`: InfluxDB bucket name
+- `measurement`: InfluxDB measurement name
+- `tag`: InfluxDB tag name
+- `config`: See [`InfluxTimespanParams`](#influxtimespanparams) in [`<config>`](#config).
+    - Specify InfluxDB query timespan.
+
+### `get`
+
+**Usage: `/get <bucket> <measurement> <field> <where> [<config>]`**
+
+Read the latest values for InfluxDB field.
+The values can be filtered by specifying InfluxDB tag filter.
+
+**Params:**
+- `bucket`: InfluxDB bucket name
+- `measurement`: InfluxDB measurement name
+- `field`: InfluxDB field name
+- `where`: InfluxDB tag filter consisting of tag-value pairs.
+    - Tags and values are separated by equal sign (`=`) and pairs by commas (`,`).
+    - `*` can be used to match all values.
+    - Example: `host=name,region=finland` can be used to find the values from specific host and region.
+- `config`: See [`InfluxTagParams`](#influxtagparams) in [`<config>`](#config).
+    - Specify InfluxDB query timespan.
+    - Specify the shown InfluxDB tags in the command response.
+
+### `graph`
+
+**Usage: `/graph <type> <bucket> <measurement> <field> <where> [<config>]`**
+
+Create [Chart.js](https://www.chartjs.org/) visualization of InfluxDB field.
+The command returns InfluxDB fields as graph labels and tags as image caption.
+The graph values are aggregated by default.
+
+**Params:**
+- `type`: Graph type (`line` or `bar`)
+- `bucket`: InfluxDB bucket name
+- `measurement`: InfluxDB measurement name
+- `field`: InfluxDB field name
+- `where`: InfluxDB tag filter consisting of tag-value pairs.
+    - Tags and values are separated by equal sign (`=`) and pairs by commas (`,`).
+    - `*` can be used to match all values.
+    - Example: `host=name,region=finland` can be used to find the values from specific host and region.
+- `config`: See [`InfluxAggregateParams`](#influxaggregateparams) in [`<config>`](#config).
+    - Specify InfluxDB query timespan.
+    - Specify the shown InfluxDB tags in the command response.
+    - Specify InfluxDB aggregate timespan.
+    - Specify whether to query raw values from InfluxDB.
+
+### `<config>`
+
+`<config>` consists of additional parameters for a bot command.
+
+Configuration "object" consists of multiple key-value pairs:
+- Keys and values are separated by equal sign (`=`).
+- If the value is a list, the list items are separated by commas (`,`).
+- Pairs are separated by semicolons (`;`).
+- Exaple: `firstKey=value;secondKey=secondValue1,secondValue2;thirdKey=thirdValue`
+
+The config can be one of the following:
+- [`InfluxTimespanParams`](#influxtimespanparams)
+- [`InfluxTagParams`](#influxtagparams)
+- [`InfluxAggregateParams`](#influxaggregateparams).
+
+#### `InfluxTimespanParams`
+
+Specify InfluxDB query timespan.
+
+**Keys:**
+- `start`: Start time of the query as a relative InxluxDB time or an absolute UTC time without milliseconds.
+    - Relative format: `-7d`, `-1h`, `-5m`
+    - Absolute format: `2023-02-28T19:00:00Z`
+    - Default: `-7h`
+- `end`: End time of the query as a relative InxluxDB time or an absolute UTC time without milliseconds.
+    - Relative format: `1d`, `-2h`, `-10m`
+    - Absolute format: `2023-02-28T19:00:00Z`
+    - Default: -
+
+#### `InfluxTagParams`
+
+Specify returned InfluxDB tags.
+
+**Keys:**
+- `tags`: Comma-separated list of InfluxDB tags to return.
+    - Default: - (= return all tags)
+
+#### `InfluxAggregateParams`
+
+Specify InfluxDB aggregate properties.
+The used aggregate function is mean/average.
+
+**Keys:**
+- `aggregate`: InfluxDB aggregate timespan.
+    - Default: `1h`
+- `raw`: Whether to query raw values from InfluxDB (= disable aggregation).
+    - Default: -
