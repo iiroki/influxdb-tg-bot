@@ -54,6 +54,7 @@ The bot has a deployment template in order to deploy the bot to [Fly.io](https:/
 | `INFLUX_URL` | InfluxDB URL |
 | `INFLUX_TOKEN` | InfluxDB API token |
 | `INFLUX_ORG` | InfluxDB organization |
+| `TZ` | Timezone for [`date-fns`](https://date-fns.org/) |
 
 ## Commands
 
@@ -162,7 +163,7 @@ The graph values are aggregated by default.
     - Tags and values are separated by equal sign (`=`) and pairs by commas (`,`).
     - `*` can be used to match all values.
     - Example: `host=name,region=finland` can be used to find the values from specific host and region.
-- `config`: See [`InfluxAggregateParams`](#influxaggregateparams) in [`<config>`](#config).
+- `config`: See [`InfluxAggregateParams`](#influxaggregateparams) and [`ChartConfig`](#chartconfig) in [`<config>`](#config).
     - Specify InfluxDB query timespan.
     - Specify the shown InfluxDB tags in the command response.
     - Specify InfluxDB aggregate timespan.
@@ -181,7 +182,8 @@ Configuration "object" consists of multiple key-value pairs:
 The config can be one of the following:
 - [`InfluxTimespanParams`](#influxtimespanparams)
 - [`InfluxTagParams`](#influxtagparams)
-- [`InfluxAggregateParams`](#influxaggregateparams).
+- [`InfluxAggregateParams`](#influxaggregateparams)
+- [`ChartConfig`](#chartconfig).
 
 #### `InfluxTimespanParams`
 
@@ -195,7 +197,6 @@ Specify InfluxDB query timespan.
 - `end`: End time of the query as a relative InxluxDB time or an absolute UTC time without milliseconds.
     - Relative format: `1d`, `-2h`, `-10m`
     - Absolute format: `2023-02-28T19:00:00Z`
-    - Default: -
 
 #### `InfluxTagParams`
 
@@ -203,7 +204,6 @@ Specify returned InfluxDB tags.
 
 **Keys:**
 - `tags`: Comma-separated list of InfluxDB tags to return.
-    - Default: - (= return all tags)
 
 #### `InfluxAggregateParams`
 
@@ -214,7 +214,16 @@ The used aggregate function is mean/average.
 - `aggregate`: InfluxDB aggregate timespan.
     - Default: `1h`
 - `raw`: Whether to query raw values from InfluxDB (= disable aggregation).
-    - Default: -
+
+#### `ChartConfig`
+
+Specify Chart.js properties.
+
+**Keys:**
+- `min`: Minimum y-value for the graph.
+- `max`: Maximum y-value for the graph.
+- `color`: Graph color offset (different offsets produce different color schemes).
+- `seconds`: Whether to show seconds in the x-axis labels.
 
 ## License
 

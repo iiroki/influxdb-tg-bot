@@ -54,7 +54,10 @@ export class InfluxTelegramBot {
 
     // Log incoming message
     this.bot.use(async (ctx, next) => {
-      this.log(`Received message: ${JSON.stringify(ctx.message)}`)
+      if (ctx.message && 'text' in ctx.message) {
+        this.log(`Received message from "${ctx.message.from.username}": "${ctx.message.text}"`)
+      }
+
       await next()
     })
 

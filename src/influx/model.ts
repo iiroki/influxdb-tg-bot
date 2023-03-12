@@ -64,6 +64,6 @@ export const InfluxTagParamsValidator: z.ZodType<InfluxTagParams> = InfluxTimesp
 }))
 
 export const InfluxAggregateParamsValidator: z.ZodType<InfluxAggregateParams> = InfluxTagParamsValidator.and(z.object({
-  aggregateWindow: InfluxRelativeTimeValidator.optional(),
+  aggregate: InfluxRelativeTimeValidator.optional(),
   raw: z.coerce.boolean().optional()
 }))

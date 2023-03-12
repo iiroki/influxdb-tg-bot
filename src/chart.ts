@@ -2,11 +2,13 @@ import { Chart, ChartConfiguration, ChartDataset, ScatterDataPoint } from 'chart
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 import AutoColors from 'chartjs-plugin-autocolors'
 import { format, parseISO } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import { z } from 'zod'
 import { InfluxRow } from './influx/model'
 import { InfluxTableMap } from './util'
 
 Chart.register(AutoColors)
+const TZ = process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone
 const X_DATE_FORMAT = 'd.M. H:mm'
 
 const chartNodeCanvas = new ChartJSNodeCanvas({
@@ -19,12 +21,14 @@ export type ChartConfig = {
   readonly min?: number
   readonly max?: number
   readonly color?: number
+  readonly seconds?: boolean
 }
 
 export const ChartConfigValidator: z.ZodType<ChartConfig> = z.object({
   min: z.coerce.number().optional(),
   max: z.coerce.number().optional(),
-  color: z.coerce.number().max(9999).optional()
+  color: z.coerce.number().max(9999).optional(),
+  seconds: z.coerce.boolean().optional()
 })
 
 const toXy = (row: InfluxRow): ScatterDataPoint => ({
@@ -54,6 +58,7 @@ export const createChart = async (type: ChartType, tables: InfluxTableMap, confi
       data: rows.map(toXy)
     }))
 
+  const xDateFormat = X_DATE_FORMAT.concat(config.seconds ? ':ss' : '')
   const chartjs: ChartConfiguration = {
     type,
     data: { datasets },
@@ -67,7 +72,7 @@ export const createChart = async (type: ChartType, tables: InfluxTableMap, confi
               // Line chart uses the index as tick value
               if (typeof tick === 'number') {
                 const value = this.getLabelForValue(tick)
-                return format(parseISO(value), X_DATE_FORMAT)
+                return formatInTimeZone(parseISO(value), TZ, xDateFormat)
               }
 
               return null
