@@ -70,6 +70,7 @@ The bot implements the following commands:
 | [`tag`](#tag) | List all values of a tag. |
 | [`get`](#get) | Read values for a field. |
 | [`chart`](#chart) | Create a chart visualization of field values. |
+| [`actions`](#actions) | Run and manage saved actions. |
 
 **NOTE:** Brackets `[...]` indicate optional parameters!
 
