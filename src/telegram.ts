@@ -1,5 +1,5 @@
-import { Context, Telegraf } from 'telegraf'
-import { Message, Update } from 'telegraf/types'
+import { Context, NarrowedContext, Telegraf } from 'telegraf'
+import { InlineKeyboardButton, InlineKeyboardMarkup, Message, Update } from 'telegraf/types'
 import { z, ZodError } from 'zod'
 import { ChartConfigValidator, createChart } from './chart'
 import influx from './influx'
@@ -16,11 +16,8 @@ import {
   toInfluxRowMdList,
   toMdList
 } from './md'
+import storage from './storage'
 import { divideToInfluxTables, toArrayOrUndefined } from './util'
-
-type TgMessageUpdate = Context<Update> & {
-  readonly message: Message.TextMessage
-}
 
 const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
@@ -43,11 +40,16 @@ export class InfluxTelegramBot {
 
     // Validate the user who sent the message
     this.bot.use(async (ctx, next) => {
-      const username = ctx.message?.from.username
+      const user = ctx.message?.from ?? ctx.callbackQuery?.from
+      const username = user?.username
       if (!username || !this.allowedUsernames.has(username)) {
         // TODO: This is currently triggered by edited messages
         await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Unauthorized user!`))
       } else {
+        if (ctx.message) {
+          await storage.createUserIfNotExists(ctx.message.from.id)
+        }
+
         await next()
       }
     })
@@ -82,8 +84,16 @@ export class InfluxTelegramBot {
     this.bot.command('tag', this.handleGetTagValues.bind(this))
     this.bot.command('get', this.handleGetValues.bind(this))
     this.bot.command('chart', this.handleGetChart.bind(this))
+    this.bot.command('actions', this.handleActions.bind(this))
+    this.bot.command('todo', ctx => {})
 
-    // Unknown command
+    // Actions
+    this.bot.action(/^action-run\/.+$/, this.handleRunAction.bind(this))
+    this.bot.action(/^action-remove\/.+$/, this.handleRemoveAction.bind(this))
+    this.bot.action(/^action-get\/.+$/, this.handleGetAction.bind(this))
+    // TODO: Notifications
+
+    // Unknown
     this.bot.on('text', async ctx => ctx.replyWithMarkdownV2(
       createMdBlock(`${ERROR_PREFIX} Beep boop, don\'t undestand...`)
     ))
@@ -91,23 +101,26 @@ export class InfluxTelegramBot {
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
 
-  start() {
-    this.bot.launch()
+  async start() {
+    await storage.init()
+    await this.bot.launch()
     this.log('Started.')
   }
 
-  private async handleGetHelp(ctx: TgMessageUpdate) {
+  private async handleGetHelp(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     await ctx.replyWithMarkdownV2(
       `${createMdBlock(createMdHeader(`Help`))}[GitHub \\- Commands](https://github.com/iiroki/influxdb-tg-bot#commands)`
     )
   }
 
-  private async handleGetBuckets(ctx: TgMessageUpdate) {
+  private async handleGetBuckets(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     const buckets = await influx.getBuckets()
     await ctx.replyWithMarkdownV2(toMdList(buckets.map(b => b.name), 'Buckets'))
   }
 
-  private async handleGetMeasurements(ctx: TgMessageUpdate) {
+  private async handleGetMeasurements(
+    ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>
+  ) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 1) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/measurements <bucket> [<config>]'))
@@ -123,7 +136,7 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(measurements.map(m => m._measurement), 'Measurements'))
   }
 
-  private async handleGetFields(ctx: TgMessageUpdate) {
+  private async handleGetFields(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 2) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/fields <bucket> <measurement> [<config>]'))
@@ -139,7 +152,7 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(fields, 'Fields'))
   }
 
-  private async handleGetTags(ctx: TgMessageUpdate) {
+  private async handleGetTags(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 2) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/tags <bucket> <measurement> [<config>]'))
@@ -155,7 +168,7 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(tags, 'Tags'))
   }
 
-  private async handleGetTagValues(ctx: TgMessageUpdate) {
+  private async handleGetTagValues(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 3) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/tag <bucket> <measurement> <tag> [<config>]'))
@@ -171,7 +184,7 @@ export class InfluxTelegramBot {
     await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
   }
 
-  private async handleGetValues(ctx: TgMessageUpdate) {
+  private async handleGetValues(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
@@ -192,7 +205,7 @@ export class InfluxTelegramBot {
     )
   }
 
-  private async handleGetChart(ctx: TgMessageUpdate) {
+  private async handleGetChart(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
@@ -221,6 +234,113 @@ export class InfluxTelegramBot {
     })
 
     await ctx.replyWithPhoto({ source }, { caption, parse_mode: 'MarkdownV2' })
+  }
+
+  private async handleActions(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+    const params = this.getCommandParams(ctx.message?.text)
+    if (params.length === 0) {
+      await ctx.replyWithMarkdownV2(
+        createMdBlock(createMdHeader('Actions')),
+        { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'run') }
+      )
+
+      return
+    }
+
+    const method = params[0]
+    if (method === 'add') {
+      const [name, ...rest] = params.slice(1)
+      await storage.addAction(ctx.message.from.id, { name, command: rest.join(' ') })
+      await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader('Action added')}\n${name}`),)
+    } else if (method === 'remove') {
+      await ctx.replyWithMarkdownV2(
+        createMdBlock(createMdHeader('Actions (Remove)')),
+        { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'remove') }
+      )
+    } else if (method === 'get') {
+      await ctx.replyWithMarkdownV2(
+        createMdBlock(createMdHeader('Actions (Get)')),
+        { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'get') }
+      )
+    } else {
+      await ctx.replyWithMarkdownV2(this.createUsageText('/action [<add|remove|get>] [<name>] [<command>]'))
+    }
+  }
+
+  private async handleRunAction(ctx: Context) {
+    if (ctx.chat && 'callback_query' in ctx.update && 'data' in ctx.update.callback_query) {
+      const { chat } = ctx
+      const { data, from } = ctx.update.callback_query
+      const actionId = data.split('/')[1]
+      const action = storage.getActions(from.id).find(a => a.id === actionId)
+      if (!action) {
+        await ctx.deleteMessage(ctx.update.callback_query.message?.message_id)
+        return
+      }
+
+      await ctx.editMessageText(
+        createMdBlock(`${createMdHeader('Running')}\n${action.name}...`),
+        { parse_mode: 'MarkdownV2' }
+      )
+
+      // Trigger action = Telegram command
+      if (chat.type === 'private' || chat.type === 'group' || chat.type === 'supergroup') {
+        const message: Update.New & Update.NonChannel & Message = {
+          message_id: 0,
+          text: action.command,
+          from,
+          chat,
+          date: new Date().getTime(),
+          entities: [{ type: 'bot_command', offset: 0, length: action.command.split(' ')[0].length }]
+        }
+
+        await this.bot.handleUpdate({ message, update_id: 0 })
+      }
+    }
+  }
+
+  private async handleRemoveAction(ctx: NarrowedContext<Context<Update>, Update.CallbackQueryUpdate>) {
+    if ('data' in ctx.update.callback_query) {
+      const { data, from } = ctx.update.callback_query
+      const actionId = data.split('/')[1]
+      const removed = await storage.removeAction(from.id, actionId)
+      if (!removed) {
+        await ctx.deleteMessage(ctx.update.callback_query.message?.message_id)
+        return
+      }
+
+      await ctx.editMessageText(
+        createMdBlock(`${createMdHeader('Action removed')}\n${removed.name}`),
+        { parse_mode: 'MarkdownV2' }
+      )
+    }
+  }
+
+  private async handleGetAction(ctx: NarrowedContext<Context<Update>, Update.CallbackQueryUpdate>) {
+    if ('data' in ctx.update.callback_query) {
+      const { data, from } = ctx.update.callback_query
+      const actionId = data.split('/')[1]
+      const action = storage.getActions(from.id).find(a => a.id === actionId)
+      if (!action) {
+        await ctx.deleteMessage(ctx.update.callback_query.message?.message_id)
+        return
+      }
+
+      await ctx.editMessageText(
+        createMdBlock(`${createMdHeader(`Action (${action.name})`)}\n${action.command}`),
+        { parse_mode: 'MarkdownV2' }
+      )
+    }
+  }
+
+  private createActionKeyboard(userId: number, method: 'run' | 'remove' | 'get'): InlineKeyboardMarkup {
+    const actions = storage.getActions(userId)
+    const buttons: InlineKeyboardButton[] = actions.map(a => ({
+      text: a.name,
+      callback_data: `action-${method}/${a.id}`
+    }))
+
+    return { inline_keyboard: buttons.map(b => [b]) }
   }
 
   // Source: https://stackoverflow.com/a/16261693
