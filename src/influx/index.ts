@@ -1,10 +1,15 @@
 import { HttpError, InfluxDB } from '@influxdata/influxdb-client'
-import { InfluxAggregateParams, InfluxBucket, InfluxField, InfluxKey, InfluxMeasurement, InfluxRow, InfluxTagParams, InfluxTimespanParams, InfluxTagFilter } from './model'
-
-// Models
-
-
-// API
+import {
+  InfluxAggregateParams,
+  InfluxBucket,
+  InfluxField,
+  InfluxKey,
+  InfluxMeasurement,
+  InfluxRow,
+  InfluxTagParams,
+  InfluxTimespanParams,
+  InfluxTagFilter
+} from './model'
 
 const INFLUX_URL = process.env.INFLUX_URL
 const INFLUX_TOKEN = process.env.INFLUX_TOKEN
