@@ -3,8 +3,8 @@ import { readFile, writeFile } from 'fs/promises'
 import { randomUUID as uuid4 } from 'crypto'
 import { Action, ActionInput, Storage, StorageValidator, User } from './model'
 
+// Very simple storage implementation, because the bot is not meant to be used by many people.
 const STORAGE_PATH = process.env.STORAGE_PATH ?? 'storage.json'
-
 const storage: Storage = []
 
 const init = async (): Promise<void> => {

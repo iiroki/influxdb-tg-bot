@@ -169,6 +169,20 @@ The graph values are aggregated by default.
     - Specify InfluxDB aggregate timespan.
     - Specify whether to query raw values from InfluxDB.
 
+### `actions`
+
+**Usage: `/actions [<add|remove|get>] [<name*>] [<command*>]`**
+
+**\*** = Required only when adding a new action.
+
+Run and manage saved actions a.k.a shortcuts for other commands.
+The actions are persisted on disk and are user-specific.
+
+**Example:**
+```
+/actions add "Example Action" /get my-bucket my-measurement my-field *
+```
+
 ### `<config>`
 
 `<config>` consists of additional parameters for a bot command.
