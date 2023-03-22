@@ -18,15 +18,6 @@ export const divideToInfluxTables = (rows: InfluxRow[]): InfluxTableMap => {
   return tableMap
 }
 
-export const combineInfluxTableMaps = (tables: InfluxTableMap[]): InfluxTableMap => {
-  const combinedTableMap = new Map<number, InfluxRow[]>()
-  tables.forEach((t, i) => {
-    // TODO
-  })
-
-  return combinedTableMap
-}
-
 export const getInfluxTags = (rows: InfluxRow | InfluxRow[]): [string, string][] => {
   const row = Array.isArray(rows) ? rows.at(0) : rows
   if (!row) {
@@ -50,3 +41,5 @@ export const toArrayOrUndefined = <T>(value: T | T[] | undefined): T[] | undefin
 
   return Array.isArray(value) ? value : [value]
 }
+
+export const stripQuotes = (str: string): string => str.replace(/^"(.*)"$/, '$1')

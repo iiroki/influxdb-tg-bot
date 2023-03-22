@@ -15,6 +15,7 @@ const init = async (): Promise<void> => {
 
   const file = await readFile(STORAGE_PATH)
   storage.push(...StorageValidator.parse(JSON.parse(file.toString())))
+  storage.forEach(user => user.actions.sort((a, b) => a.name.localeCompare(b.name)))
 }
 
 const createUserIfNotExists = async (userId: number): Promise<void> => {
@@ -29,6 +30,7 @@ const getActions = (userId: number): Action[] => getUser(userId).actions
 const addAction = async (userId: number, action: ActionInput): Promise<void> => {
   const user = getUser(userId)
   user.actions.push({ ...action, id: uuid4() })
+  user.actions.sort((a, b) => a.name.localeCompare(b.name))
   await persist()
 }
 

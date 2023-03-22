@@ -17,7 +17,7 @@ import {
   toMdList
 } from './md'
 import storage from './storage'
-import { divideToInfluxTables, toArrayOrUndefined } from './util'
+import { divideToInfluxTables, stripQuotes, toArrayOrUndefined } from './util'
 
 const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
@@ -249,7 +249,8 @@ export class InfluxTelegramBot {
 
     const method = params[0]
     if (method === 'add') {
-      const [name, ...rest] = params.slice(1)
+      const [rawName, ...rest] = params.slice(1)
+      const name = stripQuotes(rawName)
       await storage.addAction(ctx.message.from.id, { name, command: rest.join(' ') })
       await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader('Action added')}\n${name}`),)
     } else if (method === 'remove') {
@@ -353,7 +354,7 @@ export class InfluxTelegramBot {
     return (whereStr === '*' ? [] : whereStr.split(',')).map(f => {
       const [tag, value] = f.split('=')
       // TODO: Handle undefined "tag"/"value"
-      return { tag, value: value.replace(/^"(.*)"$/, '$1') }
+      return { tag, value: stripQuotes(value) }
     })
   }
 
