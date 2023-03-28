@@ -1,4 +1,5 @@
 import { InfluxRow } from './influx/model'
+import { Notification } from './storage/model'
 
 export type InfluxTableMap = Map<number, InfluxRow[]>
 
@@ -43,3 +44,21 @@ export const toArrayOrUndefined = <T>(value: T | T[] | undefined): T[] | undefin
 }
 
 export const stripQuotes = (str: string): string => str.replace(/^"(.*)"$/, '$1')
+
+export const getValueOperatorFunc = (notification: Notification): (row: InfluxRow) => boolean => {
+  const { operator, value } = notification
+  switch (operator) {
+    case '<':
+      return row => row._value < value
+    case '>':
+      return row => row._value > value
+    case '<=':
+      return row => row._value <= value
+    case '>=':
+      return row => row._value >= value
+    case '==':
+      return row => row._value === value
+    case '!=':
+      return row => row._value !== value
+  }
+}

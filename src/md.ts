@@ -38,12 +38,16 @@ export const toInfluxRowMdList = (
       }
     })
 
-    builder.push(`${ROW_INDENT}(${formatDistance(parseISO(r._time), now, { includeSeconds: true })} ago)`)
+    builder.push(`${ROW_INDENT}(${toInfluxTimestampDistanceMd(r, now)} ago)`)
     builder.push('')
   })
 
   return createMdBlock(builder.join('\n'))
 }
+
+export const toInfluxTimestampDistanceMd = (r: InfluxRow, now = new Date()): string => (
+  formatDistance(parseISO(r._time), now, { includeSeconds: true })
+)
 
 export const toInfluxTableTagMdList = (
   tables: InfluxTableMap,

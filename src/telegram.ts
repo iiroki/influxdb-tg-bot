@@ -3,6 +3,7 @@ import { InlineKeyboardButton, InlineKeyboardMarkup, Message, Update } from 'tel
 import { z, ZodError } from 'zod'
 import { ChartConfigValidator, createChart } from './chart'
 import influx from './influx'
+import { InfluxIntervalReadData, InfluxIntervalReader } from './influx/interval'
 import {
   InfluxAggregateParamsValidator,
   InfluxTagParamsValidator,
@@ -14,10 +15,11 @@ import {
   createMdHeader,
   toInfluxTableTagMdList,
   toInfluxRowMdList,
-  toMdList
+  toMdList,
+  toInfluxTimestampDistanceMd
 } from './md'
 import storage from './storage'
-import { divideToInfluxTables, stripQuotes, toArrayOrUndefined } from './util'
+import { divideToInfluxTables, getValueOperatorFunc, stripQuotes, toArrayOrUndefined } from './util'
 
 const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
@@ -26,6 +28,7 @@ const ERROR_PREFIX = '[ERROR]'
 export class InfluxTelegramBot {
   private readonly bot: Telegraf
   private readonly allowedUsernames = new Set(TG_ALLOWED_USERNAMES)
+  private readonly intervalReader = new InfluxIntervalReader()
 
   constructor() {
     if (!TG_API_TOKEN) {
@@ -47,7 +50,7 @@ export class InfluxTelegramBot {
         await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Unauthorized user!`))
       } else {
         if (ctx.message) {
-          await storage.createUserIfNotExists(ctx.message.from.id)
+          await storage.createUserIfNotExists(ctx.message.from.id, ctx.message.chat.id)
         }
 
         await next()
@@ -57,6 +60,7 @@ export class InfluxTelegramBot {
     // Log incoming message
     this.bot.use(async (ctx, next) => {
       if (ctx.message && 'text' in ctx.message) {
+        console.log('!!! CHAT ID:', ctx.message.chat.id)
         this.log(`Received message from "${ctx.message.from.username}": "${ctx.message.text}"`)
       }
 
@@ -85,12 +89,14 @@ export class InfluxTelegramBot {
     this.bot.command('get', this.handleGetValues.bind(this))
     this.bot.command('chart', this.handleGetChart.bind(this))
     this.bot.command('actions', this.handleActions.bind(this))
+    this.bot.command('notifications_add', this.handleAddNotification.bind(this))
     this.bot.command('todo', ctx => {})
 
     // Actions
     this.bot.action(/^action-run\/.+$/, this.handleRunAction.bind(this))
     this.bot.action(/^action-remove\/.+$/, this.handleRemoveAction.bind(this))
     this.bot.action(/^action-get\/.+$/, this.handleGetAction.bind(this))
+    // this.bot.action(/^notification-create\/.+$/, this.handleCreateNotification.bind(this))
     // TODO: Notifications
 
     // Unknown
@@ -98,12 +104,16 @@ export class InfluxTelegramBot {
       createMdBlock(`${ERROR_PREFIX} Beep boop, don\'t undestand...`)
     ))
 
+    // Notifications
+    this.intervalReader.on('data', this.handleNotificationData.bind(this))
+
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
 
   async start() {
     await storage.init()
-    await this.bot.launch()
+    this.intervalReader.init(storage.getAllNotifications())
+    this.bot.launch()
     this.log('Started.')
   }
 
@@ -268,6 +278,33 @@ export class InfluxTelegramBot {
     }
   }
 
+  private async handleAddNotification(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+    const params = this.getCommandParams(ctx.message?.text)
+    if (params.length < 8) {
+      await ctx.replyWithMarkdownV2(this.createUsageText(
+        '/notifications_add <name> <operator> <value> <intervalSeconds> <bucket> <measurement> <field> <where>'
+      ))
+
+      return
+    }
+
+    const [rawName, operator, value, intervalSeconds, bucket, measurement, field, where] = params
+    const name = stripQuotes(rawName)
+    const notification = await storage.addNotification(ctx.message.from.id, {
+      name,
+      operator,
+      value: Number(value),
+      intervalMs: Number(intervalSeconds) * 1000,
+      bucket,
+      measurement,
+      field,
+      where: this.parseWhere(where)
+    })
+
+    this.intervalReader.create(notification)
+    await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader('Notification added')}\n${name}`),)
+  }
+
   private async handleRunAction(ctx: Context) {
     if (ctx.chat && 'callback_query' in ctx.update && 'data' in ctx.update.callback_query) {
       const { chat } = ctx
@@ -331,6 +368,36 @@ export class InfluxTelegramBot {
         createMdBlock(`${createMdHeader(`Action (${action.name})`)}\n${action.command}`),
         { parse_mode: 'MarkdownV2' }
       )
+    }
+  }
+
+  private async handleNotificationData(data: InfluxIntervalReadData) {
+    const notification = storage.getAllNotifications().find(n => n.id === data.id)
+    if (notification && data.rows.length > 0) {
+      const row = data.rows[0]
+      const func = getValueOperatorFunc(notification)
+      if (!func(row)) {
+        return 
+      }
+
+      const user = storage.getNotificationUser(notification.id)
+      if (!user) {
+        return
+      }
+
+      const builder: (string | number)[] = [
+        createMdHeader(`Notification`),
+        `${notification.name}: ${row._value}`,
+        `(${toInfluxTimestampDistanceMd(row)})`
+      ]
+
+      const message = createMdBlock(builder.join('\n'))
+      await this.bot.telegram.sendMessage(user.chatId, message, { parse_mode: 'MarkdownV2' })
+      this.intervalReader.remove(data.id)
+      storage.removeNotification(user.id, notification.id)
+    } else {
+      this.log('Unknown notification (removing...)', data.id)
+      this.intervalReader.remove(data.id)
     }
   }
 

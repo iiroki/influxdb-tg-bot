@@ -8,6 +8,7 @@
 - Browse InfluxDB schema
 - Read values from InfluxDB
 - Create chart visualizations from InfluxDB field values
+- Save action shortcuts as buttons
 - TODO: Define notification rules and send notifications
 
 ## Quickstart
