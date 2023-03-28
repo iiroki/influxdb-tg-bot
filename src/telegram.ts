@@ -60,7 +60,6 @@ export class InfluxTelegramBot {
     // Log incoming message
     this.bot.use(async (ctx, next) => {
       if (ctx.message && 'text' in ctx.message) {
-        console.log('!!! CHAT ID:', ctx.message.chat.id)
         this.log(`Received message from "${ctx.message.from.username}": "${ctx.message.text}"`)
       }
 
