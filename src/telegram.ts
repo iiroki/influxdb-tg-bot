@@ -2,14 +2,6 @@ import { Context, NarrowedContext, Telegraf } from 'telegraf'
 import { InlineKeyboardButton, InlineKeyboardMarkup, Message, Update } from 'telegraf/types'
 import { z, ZodError } from 'zod'
 import { ChartConfigValidator, createChart } from './chart'
-import influx from './influx'
-import { InfluxIntervalReadData, InfluxIntervalReader } from './influx/interval'
-import {
-  InfluxAggregateParamsValidator,
-  InfluxTagParamsValidator,
-  InfluxTimespanParamsValidator,
-  InfluxTagFilter
-} from './influx/model'
 import {
   createMdBlock,
   createMdHeader,
@@ -19,6 +11,14 @@ import {
   toInfluxTimestampDistanceMd,
   formatObject
 } from './format'
+import influx from './influx'
+import { InfluxIntervalReadData, InfluxIntervalReader } from './influx/interval'
+import {
+  InfluxAggregateParamsValidator,
+  InfluxTagParamsValidator,
+  InfluxTimespanParamsValidator,
+  InfluxTagFilter
+} from './influx/model'
 import storage from './storage'
 import { divideToInfluxTables, getValueOperatorFunc, stripQuotes, toArrayOrUndefined } from './util'
 import { VOCABULARY as V } from './vocabulary'
@@ -167,7 +167,7 @@ export class InfluxTelegramBot {
     if (params.length < 1) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/measurements <bucket> [<config>]'))
     }
-    
+
     const [bucket, configStr] = params
     const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const measurements = await influx.getMeasurements(bucket, config)
@@ -464,7 +464,7 @@ export class InfluxTelegramBot {
       const row = data.rows[0]
       const func = getValueOperatorFunc(notification)
       if (!func(row)) {
-        return 
+        return
       }
 
       const user = storage.getNotificationUser(notification.id)
@@ -550,6 +550,6 @@ export class InfluxTelegramBot {
   }
 
   private log(...args: any[]) {
-    console.log(`[InfluxTelegramBot]`, ...args)
+    console.log('[InfluxTelegramBot]', ...args)
   }
 }

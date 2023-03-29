@@ -1,6 +1,6 @@
+import { randomUUID as uuid4 } from 'crypto'
 import { existsSync } from 'fs'
 import { readFile, writeFile } from 'fs/promises'
-import { randomUUID as uuid4 } from 'crypto'
 import { Action, ActionInput, ActionValidator, Notification, NotificationInput, NotificationValidator, Storage, StorageValidator, User } from './model'
 
 // Very simple storage implementation, because the bot is not meant to be used by many people.

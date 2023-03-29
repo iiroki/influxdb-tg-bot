@@ -1,6 +1,6 @@
 import EventEmitter from 'events'
-import influx from '.'
 import { InfluxRow, InfluxTagFilter, InfluxTagParams } from './model'
+import influx from '.'
 
 export declare interface InfluxIntervalReader {
   on(event: 'data', listener: (data: InfluxIntervalReadData) => void | Promise<void>): this
@@ -59,6 +59,6 @@ export class InfluxIntervalReader extends EventEmitter {
   }
 
   private log(...args: any[]) {
-    console.log(`[InfluxIntervalReader]`, ...args)
+    console.log('[InfluxIntervalReader]', ...args)
   }
 }
