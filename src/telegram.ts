@@ -16,10 +16,15 @@ import {
   toInfluxTableTagMdList,
   toInfluxRowMdList,
   toMdList,
-  toInfluxTimestampDistanceMd
-} from './md'
+  toInfluxTimestampDistanceMd,
+  formatObject
+} from './format'
 import storage from './storage'
 import { divideToInfluxTables, getValueOperatorFunc, stripQuotes, toArrayOrUndefined } from './util'
+import { VOCABULARY as V } from './vocabulary'
+
+type MessageContext = NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>
+type CallbackContext = NarrowedContext<Context<Update>, Update.CallbackQueryUpdate>
 
 const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
@@ -47,7 +52,7 @@ export class InfluxTelegramBot {
       const username = user?.username
       if (!username || !this.allowedUsernames.has(username)) {
         // TODO: This is currently triggered by edited messages
-        await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Unauthorized user!`))
+        await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['telegram.unauthorized-user']}}`))
       } else {
         if (ctx.message) {
           await storage.createUserIfNotExists(ctx.message.from.id, ctx.message.chat.id)
@@ -70,10 +75,10 @@ export class InfluxTelegramBot {
       this.log(`Unhandled error: ${ctx}`, err)
       if (err instanceof ZodError) {
         ctx.replyWithMarkdownV2(
-          createMdBlock(`${createMdHeader(`${ERROR_PREFIX} Invalid configuration`)}\n${err.message}`)
+          createMdBlock(`${createMdHeader(`${ERROR_PREFIX} ${V['telegram.invalid-config']}`)}\n${err.message}`)
         )
       } else {
-        ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Sorry, an unknown error occurred :(`))
+        ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['telegram.unknown-error']}`))
       }
     })
 
@@ -87,24 +92,28 @@ export class InfluxTelegramBot {
     this.bot.command('tag', this.handleGetTagValues.bind(this))
     this.bot.command('get', this.handleGetValues.bind(this))
     this.bot.command('chart', this.handleGetChart.bind(this))
-    this.bot.command('actions', this.handleActions.bind(this))
+    this.bot.command('actions', this.handleRunAction.bind(this))
+    this.bot.command('actions_add', this.handleAddAction.bind(this))
+    this.bot.command('actions_remove', this.handleRemoveAction.bind(this))
+    this.bot.command('actions_get', this.handleGetAction.bind(this))
+    this.bot.command('notifications', this.handleGetNotification.bind(this))
     this.bot.command('notifications_add', this.handleAddNotification.bind(this))
-    this.bot.command('todo', ctx => {})
+    this.bot.command('notifications_remove', this.handleRemoveNotification.bind(this))
 
     // Actions
-    this.bot.action(/^action-run\/.+$/, this.handleRunAction.bind(this))
-    this.bot.action(/^action-remove\/.+$/, this.handleRemoveAction.bind(this))
-    this.bot.action(/^action-get\/.+$/, this.handleGetAction.bind(this))
-    // this.bot.action(/^notification-create\/.+$/, this.handleCreateNotification.bind(this))
-    // TODO: Notifications
+    this.bot.action(/^actions_run\/.+$/, this.handleRunActionCallback.bind(this))
+    this.bot.action(/^actions_remove\/.+$/, this.handleRemoveActionCallback.bind(this))
+    this.bot.action(/^actions_get\/.+$/, this.handleGetActionCallback.bind(this))
+    this.bot.action(/^notifications_get\/.+$/, this.handleGetNotificationCallback.bind(this))
+    this.bot.action(/^notifications_remove\/.+$/, this.handleRemoveNotificationCallback.bind(this))
 
     // Unknown
     this.bot.on('text', async ctx => ctx.replyWithMarkdownV2(
-      createMdBlock(`${ERROR_PREFIX} Beep boop, don\'t undestand...`)
+      createMdBlock(`${ERROR_PREFIX} ${V['telegram.unknown-command']}`)
     ))
 
     // Notifications
-    this.intervalReader.on('data', this.handleNotificationData.bind(this))
+    this.intervalReader.on('data', this.handleNotificationValue.bind(this))
 
     this.log(`Initialized for users: ${TG_ALLOWED_USERNAMES.join(', ')}`)
   }
@@ -116,19 +125,19 @@ export class InfluxTelegramBot {
     this.log('Started.')
   }
 
-  private async handleGetHelp(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetHelp(ctx: MessageContext) {
     await ctx.replyWithMarkdownV2(
-      `${createMdBlock(createMdHeader(`Help`))}[GitHub \\- Commands](https://github.com/iiroki/influxdb-tg-bot#commands)`
+      `${createMdBlock(createMdHeader(V['telegram.help']))}[GitHub \\- Commands](https://github.com/iiroki/influxdb-tg-bot#commands)`
     )
   }
 
-  private async handleGetBuckets(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetBuckets(ctx: MessageContext) {
     const buckets = await influx.getBuckets()
-    await ctx.replyWithMarkdownV2(toMdList(buckets.map(b => b.name), 'Buckets'))
+    await ctx.replyWithMarkdownV2(toMdList(buckets.map(b => b.name), V['influx.buckets']))
   }
 
   private async handleGetMeasurements(
-    ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>
+    ctx: MessageContext
   ) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 1) {
@@ -139,13 +148,13 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const measurements = await influx.getMeasurements(bucket, config)
     if (!measurements) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No measurements found.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['influx.measurements-not-found']}`))
     }
 
-    await ctx.replyWithMarkdownV2(toMdList(measurements.map(m => m._measurement), 'Measurements'))
+    await ctx.replyWithMarkdownV2(toMdList(measurements.map(m => m._measurement), V['influx.measurements']))
   }
 
-  private async handleGetFields(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetFields(ctx: MessageContext) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 2) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/fields <bucket> <measurement> [<config>]'))
@@ -155,13 +164,13 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const fields = await influx.getFields(bucket, measurement, config)
     if (!fields) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No fields found.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['influx.fields-not-found']}}`))
     }
 
-    await ctx.replyWithMarkdownV2(toMdList(fields, 'Fields'))
+    await ctx.replyWithMarkdownV2(toMdList(fields, V['influx.fields']))
   }
 
-  private async handleGetTags(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetTags(ctx: MessageContext) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 2) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/tags <bucket> <measurement> [<config>]'))
@@ -171,13 +180,13 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const tags = await influx.getTags(bucket, measurement, config)
     if (!tags) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No tags found.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['influx.tags-not-found']}}}`))
     }
 
-    await ctx.replyWithMarkdownV2(toMdList(tags, 'Tags'))
+    await ctx.replyWithMarkdownV2(toMdList(tags, V['influx.tags']))
   }
 
-  private async handleGetTagValues(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetTagValues(ctx: MessageContext) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 3) {
       return await ctx.replyWithMarkdownV2(this.createUsageText('/tag <bucket> <measurement> <tag> [<config>]'))
@@ -187,13 +196,13 @@ export class InfluxTelegramBot {
     const config = InfluxTimespanParamsValidator.parse(this.parseConfig(configStr))
     const tagValues = await influx.getTagValues(bucket, measurement, tag, config)
     if (!tagValues) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No tag values found.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['influx.tags-values-not-found']}`))
     }
 
-    await ctx.replyWithMarkdownV2(toMdList(tagValues, `Tag (\`${tag}\`)`))
+    await ctx.replyWithMarkdownV2(toMdList(tagValues, V['influx.tag-values'](tag)))
   }
 
-  private async handleGetValues(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetValues(ctx: MessageContext) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
@@ -206,15 +215,15 @@ export class InfluxTelegramBot {
     const config = InfluxTagParamsValidator.parse(this.parseConfig(configStr))
     const rows = await influx.getLastValue(bucket, measurement, field, where, config)
     if (!rows || rows.length === 0) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No values found.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['influx.values-not-found']}`))
     }
 
     await ctx.replyWithMarkdownV2(
-      toInfluxRowMdList(rows, { header: 'Values', tags: toArrayOrUndefined(config.tags) })
+      toInfluxRowMdList(rows, { header: V['influx.values'], tags: toArrayOrUndefined(config.tags) })
     )
   }
 
-  private async handleGetChart(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleGetChart(ctx: MessageContext) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 4) {
       return await ctx.replyWithMarkdownV2(
@@ -228,56 +237,64 @@ export class InfluxTelegramBot {
     const config = InfluxAggregateParamsValidator.and(ChartConfigValidator).parse(this.parseConfig(configStr))
     const rows = await influx.getValuesFromTimespan(bucket, measurement, field, where, config)
     if (!rows || rows.length === 0) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} No values found.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['influx.values-not-found']}`))
     }
 
     const tables = divideToInfluxTables(rows)
     const source = await createChart(type, tables, config)
     if (!source) {
-      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} Could not create a chart.`))
+      return await ctx.replyWithMarkdownV2(createMdBlock(`${ERROR_PREFIX} ${V['telegram.chart-error']}`))
     }
 
     const caption = toInfluxTableTagMdList(tables, {
-      header: 'Chart tags',
+      header: V['telegram.chart-tags'],
       tags: toArrayOrUndefined(config.tags)
     })
 
     await ctx.replyWithPhoto({ source }, { caption, parse_mode: 'MarkdownV2' })
   }
 
-  private async handleActions(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
-    const params = this.getCommandParams(ctx.message?.text)
-    if (params.length === 0) {
-      await ctx.replyWithMarkdownV2(
-        createMdBlock(createMdHeader('Actions')),
-        { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'run') }
-      )
+  private async handleRunAction(ctx: MessageContext) {
+    await ctx.replyWithMarkdownV2(
+      createMdBlock(createMdHeader(V['telegram.actions-run'])),
+      { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'run') }
+    )
+  }
 
+  private async handleAddAction(ctx: MessageContext) {
+    const params = this.getCommandParams(ctx.message?.text)
+    if (params.length < 2) {
+      await ctx.replyWithMarkdownV2(this.createUsageText('/actions_add <name> <command...>'))
       return
     }
 
-    const method = params[0]
-    if (method === 'add') {
-      const [rawName, ...rest] = params.slice(1)
-      const name = stripQuotes(rawName)
-      await storage.addAction(ctx.message.from.id, { name, command: rest.join(' ') })
-      await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader('Action added')}\n${name}`),)
-    } else if (method === 'remove') {
-      await ctx.replyWithMarkdownV2(
-        createMdBlock(createMdHeader('Actions (Remove)')),
-        { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'remove') }
-      )
-    } else if (method === 'get') {
-      await ctx.replyWithMarkdownV2(
-        createMdBlock(createMdHeader('Actions (Get)')),
-        { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'get') }
-      )
-    } else {
-      await ctx.replyWithMarkdownV2(this.createUsageText('/action [<add|remove|get>] [<name>] [<command>]'))
-    }
+    const [rawName, ...rest] = params
+    const name = stripQuotes(rawName)
+    await storage.addAction(ctx.message.from.id, { name, command: stripQuotes(rest.join(' ')) })
+    await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader(V['telegram.action-added'])}\n${name}`),)
   }
 
-  private async handleAddNotification(ctx: NarrowedContext<Context<Update>, Update.MessageUpdate<Message.TextMessage>>) {
+  private async handleRemoveAction(ctx: MessageContext) {
+    await ctx.replyWithMarkdownV2(
+      createMdBlock(createMdHeader(V['telegram.actions-remove'])),
+      { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'remove') }
+    )
+  }
+
+  private async handleGetAction(ctx: MessageContext) {
+    await ctx.replyWithMarkdownV2(
+      createMdBlock(createMdHeader(V['telegram.actions-get'])),
+      { reply_markup: this.createActionKeyboard(ctx.message.from.id, 'get') }
+    )
+  }
+
+  private async handleGetNotification(ctx: MessageContext) {
+    await ctx.replyWithMarkdownV2(
+      createMdBlock(createMdHeader(V['telegram.notifications-get'])),
+      { reply_markup: this.createNotificationKeyboard(ctx.message.from.id, 'get') }
+    )
+  }
+  private async handleAddNotification(ctx: MessageContext) {
     const params = this.getCommandParams(ctx.message?.text)
     if (params.length < 8) {
       await ctx.replyWithMarkdownV2(this.createUsageText(
@@ -301,10 +318,18 @@ export class InfluxTelegramBot {
     })
 
     this.intervalReader.create(notification)
-    await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader('Notification added')}\n${name}`),)
+    await ctx.replyWithMarkdownV2(createMdBlock(`${createMdHeader(V['telegram.notification-added'])}\n${name}`),)
   }
 
-  private async handleRunAction(ctx: Context) {
+  private async handleRemoveNotification(ctx: MessageContext) {
+    await ctx.replyWithMarkdownV2(
+      createMdBlock(createMdHeader(V['telegram.notifications-remove'])),
+      { reply_markup: this.createNotificationKeyboard(ctx.message.from.id, 'remove') }
+    )
+  }
+
+  private async handleRunActionCallback(ctx: Context) {
+    await ctx.answerCbQuery()
     if (ctx.chat && 'callback_query' in ctx.update && 'data' in ctx.update.callback_query) {
       const { chat } = ctx
       const { data, from } = ctx.update.callback_query
@@ -316,7 +341,7 @@ export class InfluxTelegramBot {
       }
 
       await ctx.editMessageText(
-        createMdBlock(`${createMdHeader('Running')}\n${action.name}...`),
+        createMdBlock(`${createMdHeader(V['telegram.action-running'])}\n${action.name}...`),
         { parse_mode: 'MarkdownV2' }
       )
 
@@ -336,7 +361,8 @@ export class InfluxTelegramBot {
     }
   }
 
-  private async handleRemoveAction(ctx: NarrowedContext<Context<Update>, Update.CallbackQueryUpdate>) {
+  private async handleRemoveActionCallback(ctx: CallbackContext) {
+    await ctx.answerCbQuery()
     if ('data' in ctx.update.callback_query) {
       const { data, from } = ctx.update.callback_query
       const actionId = data.split('/')[1]
@@ -347,13 +373,14 @@ export class InfluxTelegramBot {
       }
 
       await ctx.editMessageText(
-        createMdBlock(`${createMdHeader('Action removed')}\n${removed.name}`),
+        createMdBlock(`${createMdHeader(V['telegram.action-removed'])}\n${removed.name}`),
         { parse_mode: 'MarkdownV2' }
       )
     }
   }
 
-  private async handleGetAction(ctx: NarrowedContext<Context<Update>, Update.CallbackQueryUpdate>) {
+  private async handleGetActionCallback(ctx: CallbackContext) {
+    await ctx.answerCbQuery()
     if ('data' in ctx.update.callback_query) {
       const { data, from } = ctx.update.callback_query
       const actionId = data.split('/')[1]
@@ -364,13 +391,50 @@ export class InfluxTelegramBot {
       }
 
       await ctx.editMessageText(
-        createMdBlock(`${createMdHeader(`Action (${action.name})`)}\n${action.command}`),
+        createMdBlock(`${createMdHeader(V['telegram.action'](action.name))}\n${action.command}`),
         { parse_mode: 'MarkdownV2' }
       )
     }
   }
 
-  private async handleNotificationData(data: InfluxIntervalReadData) {
+  private async handleGetNotificationCallback(ctx: CallbackContext) {
+    await ctx.answerCbQuery()
+    if ('data' in ctx.update.callback_query) {
+      const { data, from } = ctx.update.callback_query
+      const notificationId = data.split('/')[1]
+      const notification = storage.getNotifications(from.id).find(a => a.id === notificationId)
+      if (!notification) {
+        await ctx.deleteMessage(ctx.update.callback_query.message?.message_id)
+        return
+      }
+
+      const { name, id, ...rest } = notification
+      await ctx.editMessageText(
+        createMdBlock(`${createMdHeader(V['telegram.notification'](name))}\n${formatObject(rest)}`),
+        { parse_mode: 'MarkdownV2' }
+      )
+    }
+  }
+
+  private async handleRemoveNotificationCallback(ctx: CallbackContext) {
+    await ctx.answerCbQuery()
+    if ('data' in ctx.update.callback_query) {
+      const { data, from } = ctx.update.callback_query
+      const notificationId = data.split('/')[1]
+      const removed = await storage.removeNotification(from.id, notificationId)
+      if (!removed) {
+        await ctx.deleteMessage(ctx.update.callback_query.message?.message_id)
+        return
+      }
+
+      await ctx.editMessageText(
+        createMdBlock(`${createMdHeader(V['telegram.notification-removed'])}\n${removed.name}`),
+        { parse_mode: 'MarkdownV2' }
+      )
+    }
+  }
+
+  private async handleNotificationValue(data: InfluxIntervalReadData) {
     const notification = storage.getAllNotifications().find(n => n.id === data.id)
     if (notification && data.rows.length > 0) {
       const row = data.rows[0]
@@ -385,8 +449,8 @@ export class InfluxTelegramBot {
       }
 
       const builder: (string | number)[] = [
-        createMdHeader(`Notification`),
-        `${notification.name}: ${row._value}`,
+        createMdHeader(V['telegram.notification'](notification.name)),
+        `${row._value}`,
         `(${toInfluxTimestampDistanceMd(row)})`
       ]
 
@@ -404,7 +468,17 @@ export class InfluxTelegramBot {
     const actions = storage.getActions(userId)
     const buttons: InlineKeyboardButton[] = actions.map(a => ({
       text: a.name,
-      callback_data: `action-${method}/${a.id}`
+      callback_data: `actions_${method}/${a.id}`
+    }))
+
+    return { inline_keyboard: buttons.map(b => [b]) }
+  }
+
+  private createNotificationKeyboard(userId: number, method: 'remove' | 'get'): InlineKeyboardMarkup {
+    const notifications = storage.getNotifications(userId)
+    const buttons: InlineKeyboardButton[] = notifications.map(n => ({
+      text: n.name,
+      callback_data: `notifications_${method}/${n.id}`
     }))
 
     return { inline_keyboard: buttons.map(b => [b]) }
@@ -448,7 +522,7 @@ export class InfluxTelegramBot {
   }
 
   private createUsageText(usage: string): string {
-    return createMdBlock(`${createMdHeader(`${ERROR_PREFIX} Usage`)}\n${usage}`)
+    return createMdBlock(`${createMdHeader(`${ERROR_PREFIX} ${V['telegram.usage']}`)}\n${usage}`)
   }
 
   private log(...args: any[]) {

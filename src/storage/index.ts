@@ -51,6 +51,8 @@ const removeAction = async (userId: number, actionId: string): Promise<Action | 
 
 const getAllNotifications = (): Notification[] => storage.flatMap(u => u.notifications)
 
+const getNotifications = (userId: number): Notification[] => getUser(userId).notifications
+
 const addNotification = async (userId: number, input: NotificationInput): Promise<Notification> => {
   const notification = NotificationValidator.parse({ ...input, id: uuid4() })
   const user = getUser(userId)
@@ -105,6 +107,7 @@ export default {
   addAction,
   removeAction,
   getAllNotifications,
+  getNotifications,
   addNotification,
   removeNotification,
   getNotificationUser,

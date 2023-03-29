@@ -74,3 +74,17 @@ export const toInfluxTableTagMdList = (
 
   return createMdBlock(builder.join('\n'))
 }
+
+export const formatObject = (o: object, delimiter = '\n', prefix = ''): string => {
+  const builder: string[] = []
+  for (const [k, v] of Object.entries(o)) {
+    if (Array.isArray(v)) {
+      builder.push(`${k}:`)
+      v.forEach(i => builder.push(formatObject(i, delimiter, '  ')))
+    } else {
+      builder.push(`${prefix}${k}: ${v}`)
+    }
+  }
+
+  return builder.join(delimiter)
+}
