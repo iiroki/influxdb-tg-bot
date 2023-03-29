@@ -1,4 +1,5 @@
 export const VOCABULARY = {
+  // Responses
   'telegram.unauthorized-user': 'Unauthorized user!',
   'telegram.usage': 'Usage',
   'telegram.invalid-config': 'Invalid configuration',
@@ -19,6 +20,26 @@ export const VOCABULARY = {
   'telegram.notifications-remove': 'Notifications (Remove)',
   'telegram.notification-added': 'Notification added',
   'telegram.notification-removed': 'Notification removed',
+
+  // Commands
+  'telegram.command.start': 'Start a new conversation.',
+  'telegram.command.help': 'GitHub command documentation.',
+  'telegram.command.buckets': 'List InfluxDB buckets.',
+  'telegram.command.measurements': 'List InfluxDB measurements.',
+  'telegram.command.fields': 'List InfluxDB fields.',
+  'telegram.command.tags': 'List InfluxDB tags.',
+  'telegram.command.tag': 'List InfluxDB tag values.',
+  'telegram.command.get': 'Get latest values from InfluxDB.',
+  'telegram.command.chart': 'Create a chart visualization.',
+  'telegram.command.actions': 'Run saved action.',
+  'telegram.command.actions_get': 'List saved actions.',
+  'telegram.command.actions_add': 'Save a new action.',
+  'telegram.command.actions_remove': 'Remove a saved action.',
+  'telegram.command.notifications': 'List current notifications.',
+  'telegram.command.notifications_add': 'Add a new notification.',
+  'telegram.command.notifications_remove': 'Remove a notification.',
+
+  // Influx terms
   'influx.buckets': 'Buckets',
   'influx.measurements': 'Measurements',
   'influx.measurements-not-found': 'No measurements found.',
@@ -29,6 +50,5 @@ export const VOCABULARY = {
   'influx.tag-values': (t: string) => `Tag (\`${t}\`)`,
   'influx.tags-values-not-found': 'No tag values found.',
   'influx.values': 'Values',
-  'influx.values-not-found': 'No values found.',
-
+  'influx.values-not-found': 'No values found.'
 } as const

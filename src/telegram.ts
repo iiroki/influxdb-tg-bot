@@ -30,6 +30,25 @@ const TG_API_TOKEN = process.env.TG_API_TOKEN
 const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
 const ERROR_PREFIX = '[ERROR]'
 
+enum Command {
+  Start = 'start',
+  Help = 'help',
+  Buckets = 'buckets',
+  Measurements = 'measurements',
+  Fields = 'fields',
+  Tags = 'tags',
+  Tag = 'tag',
+  Get = 'get',
+  Chart = 'chart',
+  Actions = 'actions',
+  ActionsAdd = 'actions_add',
+  ActionsGet = 'actions_get',
+  ActionsRemove = 'actions_remove',
+  Notifications = 'notifications',
+  NotificationsAdd = 'notifications_add',
+  NotificationsRemove = 'notifications_remove'
+}
+
 export class InfluxTelegramBot {
   private readonly bot: Telegraf
   private readonly allowedUsernames = new Set(TG_ALLOWED_USERNAMES)
@@ -123,6 +142,11 @@ export class InfluxTelegramBot {
     this.intervalReader.init(storage.getAllNotifications())
     this.bot.launch()
     this.log('Started.')
+
+    // Set command help
+    this.bot.telegram.setMyCommands(Object.values(Command).map(c => ({
+      command: c, description: V[`telegram.command.${c}`]
+    })))
   }
 
   private async handleGetHelp(ctx: MessageContext) {
