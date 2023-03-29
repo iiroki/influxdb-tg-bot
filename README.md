@@ -36,15 +36,28 @@ The bot has a deployment template in order to deploy the bot to [Fly.io](https:/
     flyctl launch
     ```
 
-2. Set the required env variables:
-    ```
-    flyctl secrets set <key>=<value> <key>=<value> ...
-    ```
+2. Copy `fly.toml.example` to `fly.toml`.
 
-3. Deploy the bot:
+3. Set the required env variables:
+    - Deployment environment (`fly.toml`):
+        ```
+        [env]
+            <key> = <value>
+            <key> = <value>
+            ...
+        ```
+    - Secrets (Fly CLI):
+        ```
+        flyctl secrets set <key>=<value> <key>=<value> ...
+        ```
+
+4. Deploy the bot:
     ```
     flyctl deploy
     ```
+
+**NOTE:**
+To persist actions and notifications, add a mount for persistent storage!
 
 ## Configuration
 
