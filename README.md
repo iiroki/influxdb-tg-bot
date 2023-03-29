@@ -9,7 +9,7 @@
 - Read values from InfluxDB
 - Create chart visualizations from InfluxDB field values
 - Save action shortcuts as buttons
-- TODO: Define notification rules and send notifications
+- Define and receive notifications
 
 ## Quickstart
 
@@ -71,7 +71,13 @@ The bot implements the following commands:
 | [`tag`](#tag) | List all values of a tag. |
 | [`get`](#get) | Read values for a field. |
 | [`chart`](#chart) | Create a chart visualization of field values. |
-| [`actions`](#actions) | Run and manage saved actions. |
+| [`actions`](#actions) | Run saved actions. |
+| [`actions_add`](#actions_add) | Save new actions. |
+| [`actions_remove`](#actions_remove) | Remove saved actions. |
+| [`actions_get`](#actions_get) | View saved actions. |
+| [`notifications`](#notifications) | View current notifications. |
+| [`notifications_add`](#notifications_add) | Add new notifications. |
+| [`notifications_remove`](#notifications_remove) | Remove notifications. |
 
 **NOTE:** Brackets `[...]` indicate optional parameters!
 
@@ -173,17 +179,75 @@ The graph values are aggregated by default.
 
 ### `actions`
 
-**Usage: `/actions [<add|remove|get>] [<name*>] [<command*>]`**
+**Usage: `/actions`**
 
-**\*** = Required only when adding a new action.
+Run saved action.
 
-Run and manage saved actions a.k.a shortcuts for other commands.
-The actions are persisted on disk and are user-specific.
+### `actions_add`
+
+**Usage: `/actions_add <name> <command...>`**
+
+Save new action.
+
+**Params:**
+- `name`: Name of the action
+- `command`: Command bound to the action
 
 **Example:**
 ```
-/actions add "Example Action" /get my-bucket my-measurement my-field *
+/actions_add "Example Action" /get my-bucket my-measurement my-field *
 ```
+
+### `actions_remove`
+
+**Usage: `/actions_remove`**
+
+Remove saved action.
+
+### `actions_get`
+
+**Usage: `/actions_get`**
+
+View saved action.
+
+### `notifications`
+
+**Usage: `/notifications`**
+
+View current notification.
+
+### `notifications_add`
+
+**Usage: `/notifications_add <name> <operator> <value> <intervalSeconds> <bucket> <measurement> <field> <where>`**
+
+Add new notification.
+
+The notifications will be checked in intervals, and the bot will send a message if the notification condition is met.
+
+**Params:**
+- `name`: Name of the notification
+- `operator`: Operator for the notification condition
+    - `>`: Greater than
+    - `<`: Less than
+    - `>=`: Greater than or equal
+    - `<=`: Less than or equal
+    - `==`: Equal
+    - `!=`: Not equal
+- `value`: Value for the notification condition
+- `intervalSeconds`: Notification check interval in seconds
+- `bucket`: InfluxDB bucket name
+- `measurement`: InfluxDB measurement name
+- `field`: InfluxDB field name
+- `where`: InfluxDB tag filter consisting of tag-value pairs.
+    - Tags and values are separated by equal sign (`=`) and pairs by commas (`,`).
+    - `*` can be used to match all values.
+    - Example: `host=name,region=finland` can be used to find the values from specific host and region.
+
+### `notifications_remove`
+
+**Usage: `/notifications_remove`**
+
+Remove notification.
 
 ### `<config>`
 
