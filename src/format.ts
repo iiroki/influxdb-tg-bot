@@ -38,12 +38,16 @@ export const toInfluxRowMdList = (
       }
     })
 
-    builder.push(`${ROW_INDENT}(${formatDistance(parseISO(r._time), now, { includeSeconds: true })} ago)`)
+    builder.push(`${ROW_INDENT}(${toInfluxTimestampDistanceMd(r, now)} ago)`)
     builder.push('')
   })
 
   return createMdBlock(builder.join('\n'))
 }
+
+export const toInfluxTimestampDistanceMd = (r: InfluxRow, now = new Date()): string => (
+  formatDistance(parseISO(r._time), now, { includeSeconds: true })
+)
 
 export const toInfluxTableTagMdList = (
   tables: InfluxTableMap,
@@ -69,4 +73,18 @@ export const toInfluxTableTagMdList = (
   }
 
   return createMdBlock(builder.join('\n'))
+}
+
+export const formatObject = (o: object, delimiter = '\n', prefix = ''): string => {
+  const builder: string[] = []
+  for (const [k, v] of Object.entries(o)) {
+    if (Array.isArray(v)) {
+      builder.push(`${k}:`)
+      v.forEach(i => builder.push(formatObject(i, delimiter, '  ')))
+    } else {
+      builder.push(`${prefix}${k}: ${v}`)
+    }
+  }
+
+  return builder.join(delimiter)
 }
