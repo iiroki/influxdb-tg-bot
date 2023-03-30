@@ -31,21 +31,21 @@ const TG_ALLOWED_USERNAMES = process.env.TG_ALLOWED_USERNAMES?.split(',') ?? []
 const ERROR_PREFIX = '[ERROR]'
 
 enum Command {
+  Help = 'help',
   Actions = 'actions',
+  Notifications = 'notifications',
+  Chart = 'chart',
   ActionsAdd = 'actions_add',
   ActionsGet = 'actions_get',
   ActionsRemove = 'actions_remove',
-  Notifications = 'notifications',
   NotificationsAdd = 'notifications_add',
   NotificationsRemove = 'notifications_remove',
-  Chart = 'chart',
   Buckets = 'buckets',
   Measurements = 'measurements',
   Fields = 'fields',
   Tags = 'tags',
   Tag = 'tag',
   Get = 'get',
-  Help = 'help',
   Start = 'start'
 }
 
